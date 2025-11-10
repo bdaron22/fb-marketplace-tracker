@@ -55,7 +55,7 @@ export default function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': 'YOUR_API_KEY_HERE', // You'll need to add this
+          'x-api-key': 'import.meta.env.VITE_ANTHROPIC_API_KEY', // You'll need to add this
           'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
