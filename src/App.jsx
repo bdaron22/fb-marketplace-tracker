@@ -1,5 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, ExternalLink, Search, Calendar, Camera } from 'lucide-react';
+import pb from './lib/pb';
+
+// Map PocketBase record to local format (camelCase)
+const fromPB = (record) => ({
+  id: record.id,
+  itemName: record.item_name || '',
+  seller: record.seller || '',
+  price: record.price || 0,
+  fbLink: record.fb_link || '',
+  messengerNotes: record.messenger_notes || '',
+  status: record.status || 'new',
+  dateAdded: record.date_added || new Date().toISOString().split('T')[0],
+  followUpDate: record.follow_up_date || ''
+});
+
+// Map local format to PocketBase fields (snake_case)
+const toPB = (lead) => ({
+  item_name: lead.itemName,
+  seller: lead.seller,
+  price: lead.price ? parseFloat(lead.price) : 0,
+  fb_link: lead.fbLink || '',
+  messenger_notes: lead.messengerNotes || '',
+  status: lead.status || 'new',
+  date_added: lead.dateAdded || new Date().toISOString().split('T')[0],
+  follow_up_date: lead.followUpDate || ''
+});
 
 export default function App() {
   const [leads, setLeads] = useState([]);
@@ -7,6 +33,8 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
     itemName: '',
     seller: '',
@@ -20,24 +48,42 @@ export default function App() {
 
   useEffect(() => {
     loadData();
+
+    // Subscribe to real-time changes
+    let unsubscribe;
+    pb.collection('leads').subscribe('*', (e) => {
+      if (e.action === 'create') {
+        setLeads((prev) => [fromPB(e.record), ...prev]);
+      } else if (e.action === 'update') {
+        setLeads((prev) => prev.map((l) => l.id === e.record.id ? fromPB(e.record) : l));
+      } else if (e.action === 'delete') {
+        setLeads((prev) => prev.filter((l) => l.id !== e.record.id));
+      }
+    }).then((unsub) => {
+      unsubscribe = unsub;
+    }).catch(() => {
+      // Real-time subscription unavailable — that's OK
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
-  const loadData = () => {
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const stored = localStorage.getItem('purchase-leads');
-      if (stored) {
-        setLeads(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.log('No existing data found');
-    }
-  };
-
-  const saveData = (newLeads) => {
-    try {
-      localStorage.setItem('purchase-leads', JSON.stringify(newLeads));
-    } catch (error) {
-      console.error('Error saving data:', error);
+      const records = await pb.collection('leads').getFullList({ sort: '-created' });
+      setLeads(records.map(fromPB));
+    } catch (err) {
+      console.error('Error loading leads:', err);
+      setError(
+        'Could not connect to PocketBase. Make sure Docker is running and the "leads" collection exists.\n' +
+        'Run: node scripts/setup-pb.js <admin-email> <admin-password>'
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -104,28 +150,29 @@ Rules:
       const extracted = JSON.parse(cleanText);
 
       if (extracted.leads && extracted.leads.length > 0) {
-        const newLeads = extracted.leads.map(lead => ({
-          id: Date.now() + Math.random(),
-          itemName: lead.itemName || '',
-          seller: lead.seller || '',
-          price: lead.price ? parseFloat(lead.price) : 0,
-          fbLink: '',
-          messengerNotes: lead.messengerNotes || '',
-          status: 'new',
-          dateAdded: new Date().toISOString().split('T')[0],
-          followUpDate: ''
-        }));
-
-        const updatedLeads = [...leads, ...newLeads];
-        setLeads(updatedLeads);
-        saveData(updatedLeads);
-        
-        alert(`Successfully added ${newLeads.length} lead${newLeads.length > 1 ? 's' : ''} from screenshot!`);
+        const today = new Date().toISOString().split('T')[0];
+        const created = await Promise.all(
+          extracted.leads.map(lead =>
+            pb.collection('leads').create(toPB({
+              itemName: lead.itemName || '',
+              seller: lead.seller || '',
+              price: lead.price ? parseFloat(lead.price) : 0,
+              fbLink: '',
+              messengerNotes: lead.messengerNotes || '',
+              status: 'new',
+              dateAdded: today,
+              followUpDate: ''
+            }))
+          )
+        );
+        // Real-time subscription will update the list; update locally as fallback
+        setLeads((prev) => [...created.map(fromPB), ...prev]);
+        alert(`Successfully added ${created.length} lead${created.length > 1 ? 's' : ''} from screenshot!`);
       } else {
         alert('No vehicle leads found in the image. Please try another screenshot.');
       }
-    } catch (error) {
-      console.error('Error processing image:', error);
+    } catch (err) {
+      console.error('Error processing image:', err);
       alert('Error processing image. Please make sure it\'s a clear screenshot of Facebook Messenger.');
     } finally {
       setUploading(false);
@@ -143,57 +190,59 @@ Rules:
     }
   };
 
-  const addLead = () => {
+  const addLead = async () => {
     if (!formData.itemName || !formData.seller) {
       alert('Please fill in item name and seller');
       return;
     }
-
-    const newLead = {
-      id: Date.now(),
-      ...formData,
-      price: formData.price ? parseFloat(formData.price) : 0
-    };
-
-    const updatedLeads = [...leads, newLead];
-    setLeads(updatedLeads);
-    saveData(updatedLeads);
-    
-    setFormData({
-      itemName: '',
-      seller: '',
-      price: '',
-      fbLink: '',
-      messengerNotes: '',
-      status: 'new',
-      dateAdded: new Date().toISOString().split('T')[0],
-      followUpDate: ''
-    });
-    setShowForm(false);
-  };
-
-  const deleteLead = (id) => {
-    if (window.confirm('Are you sure you want to delete this lead?')) {
-      const updatedLeads = leads.filter(lead => lead.id !== id);
-      setLeads(updatedLeads);
-      saveData(updatedLeads);
+    try {
+      const record = await pb.collection('leads').create(toPB(formData));
+      setLeads((prev) => [fromPB(record), ...prev]);
+      setFormData({
+        itemName: '',
+        seller: '',
+        price: '',
+        fbLink: '',
+        messengerNotes: '',
+        status: 'new',
+        dateAdded: new Date().toISOString().split('T')[0],
+        followUpDate: ''
+      });
+      setShowForm(false);
+    } catch (err) {
+      console.error('Error adding lead:', err);
+      alert('Error saving lead. Please check your PocketBase connection.');
     }
   };
 
-  const updateStatus = (id, newStatus) => {
-    const updatedLeads = leads.map(lead =>
-      lead.id === id ? { ...lead, status: newStatus } : lead
-    );
-    setLeads(updatedLeads);
-    saveData(updatedLeads);
+  const deleteLead = async (id) => {
+    if (window.confirm('Are you sure you want to delete this lead?')) {
+      try {
+        await pb.collection('leads').delete(id);
+        setLeads((prev) => prev.filter((l) => l.id !== id));
+      } catch (err) {
+        console.error('Error deleting lead:', err);
+        alert('Error deleting lead.');
+      }
+    }
   };
 
-  const updateNotes = (id, notes) => {
-    const updatedLeads = leads.map(lead =>
-      lead.id === id ? { ...lead, messengerNotes: notes } : lead
-    );
-    setLeads(updatedLeads);
-    saveData(updatedLeads);
+  const updateStatus = async (id, newStatus) => {
+    try {
+      await pb.collection('leads').update(id, { status: newStatus });
+      setLeads((prev) => prev.map((l) => l.id === id ? { ...l, status: newStatus } : l));
+    } catch (err) {
+      console.error('Error updating status:', err);
+    }
+  };
+
+  const updateNotes = async (id, notes) => {
+    try {
+      await pb.collection('leads').update(id, { messenger_notes: notes });
+      setLeads((prev) => prev.map((l) => l.id === id ? { ...l, messengerNotes: notes } : l));
+    } catch (err) {
+      console.error('Error updating notes:', err);
+    }
   };
 
   const filteredLeads = leads.filter(lead => {
@@ -251,6 +300,19 @@ Rules:
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
                 <span className="text-blue-800 font-medium">Processing screenshot and extracting lead information...</span>
               </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <p className="text-red-800 font-semibold mb-1">PocketBase Connection Error</p>
+              <pre className="text-sm text-red-700 whitespace-pre-wrap">{error}</pre>
+              <button
+                onClick={loadData}
+                className="mt-2 text-sm bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+              >
+                Retry
+              </button>
             </div>
           )}
 
@@ -387,86 +449,93 @@ Rules:
           </div>
         </div>
 
-        <div className="space-y-4">
-          {filteredLeads.length === 0 ? (
-            <div className="bg-white rounded-lg shadow-sm p-12 text-center text-gray-500">
-              <Camera size={48} className="mx-auto mb-4 text-gray-400" />
-              <p className="text-lg font-medium mb-2">No leads found</p>
-              <p>Upload a screenshot of your Messenger or add leads manually to get started!</p>
-            </div>
-          ) : (
-            filteredLeads.map(lead => (
-              <div key={lead.id} className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-xl font-semibold text-gray-900">{lead.itemName}</h3>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[lead.status]}`}>
-                        {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
-                      </span>
-                    </div>
-                    <div className="text-gray-600 space-y-1">
-                      <p>Seller: <span className="font-medium">{lead.seller}</span></p>
-                      {lead.price > 0 && <p>Price: <span className="font-medium">${lead.price.toFixed(2)}</span></p>}
-                      <p className="text-sm">Added: {lead.dateAdded}</p>
-                      {lead.followUpDate && (
-                        <p className="text-sm">
-                          Follow-up: <span className={lead.followUpDate <= new Date().toISOString().split('T')[0] && lead.status !== 'purchased' && lead.status !== 'passed' ? 'text-red-600 font-semibold' : ''}>{lead.followUpDate}</span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    {lead.fbLink && (
-                      <a
-                        href={lead.fbLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Open FB Marketplace listing"
-                      >
-                        <ExternalLink size={20} />
-                      </a>
-                    )}
-                    <button
-                      onClick={() => deleteLead(lead.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Delete lead"
-                    >
-                      <Trash2 size={20} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                  <select
-                    value={lead.status}
-                    onChange={(e) => updateStatus(lead.id, e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="new">New Lead</option>
-                    <option value="contacted">Contacted</option>
-                    <option value="negotiating">Negotiating</option>
-                    <option value="purchased">Purchased</option>
-                    <option value="passed">Passed</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Messenger Notes</label>
-                  <textarea
-                    value={lead.messengerNotes}
-                    onChange={(e) => updateNotes(lead.id, e.target.value)}
-                    placeholder="Copy and paste messenger conversations or add notes here..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    rows="3"
-                  />
-                </div>
+        {loading ? (
+          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-500">Loading leads from PocketBase...</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredLeads.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm p-12 text-center text-gray-500">
+                <Camera size={48} className="mx-auto mb-4 text-gray-400" />
+                <p className="text-lg font-medium mb-2">No leads found</p>
+                <p>Upload a screenshot of your Messenger or add leads manually to get started!</p>
               </div>
-            ))
-          )}
-        </div>
+            ) : (
+              filteredLeads.map(lead => (
+                <div key={lead.id} className="bg-white rounded-lg shadow-sm p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-xl font-semibold text-gray-900">{lead.itemName}</h3>
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[lead.status]}`}>
+                          {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+                        </span>
+                      </div>
+                      <div className="text-gray-600 space-y-1">
+                        <p>Seller: <span className="font-medium">{lead.seller}</span></p>
+                        {lead.price > 0 && <p>Price: <span className="font-medium">${lead.price.toFixed(2)}</span></p>}
+                        <p className="text-sm">Added: {lead.dateAdded}</p>
+                        {lead.followUpDate && (
+                          <p className="text-sm">
+                            Follow-up: <span className={lead.followUpDate <= new Date().toISOString().split('T')[0] && lead.status !== 'purchased' && lead.status !== 'passed' ? 'text-red-600 font-semibold' : ''}>{lead.followUpDate}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {lead.fbLink && (
+                        <a
+                          href={lead.fbLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Open FB Marketplace listing"
+                        >
+                          <ExternalLink size={20} />
+                        </a>
+                      )}
+                      <button
+                        onClick={() => deleteLead(lead.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete lead"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    <select
+                      value={lead.status}
+                      onChange={(e) => updateStatus(lead.id, e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="new">New Lead</option>
+                      <option value="contacted">Contacted</option>
+                      <option value="negotiating">Negotiating</option>
+                      <option value="purchased">Purchased</option>
+                      <option value="passed">Passed</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Messenger Notes</label>
+                    <textarea
+                      value={lead.messengerNotes}
+                      onChange={(e) => updateNotes(lead.id, e.target.value)}
+                      placeholder="Copy and paste messenger conversations or add notes here..."
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      rows="3"
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
