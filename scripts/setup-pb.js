@@ -11,7 +11,7 @@
 
 import PocketBase from 'pocketbase';
 
-const PB_URL = process.env.VITE_POCKETBASE_URL || 'http://127.0.0.1:8090';
+const PB_URL = process.env.VITE_POCKETBASE_URL || 'https://falcon-bray.pockethost.io';
 const email = process.argv[2] || process.env.PB_ADMIN_EMAIL;
 const password = process.argv[3] || process.env.PB_ADMIN_PASSWORD;
 
@@ -24,8 +24,8 @@ const pb = new PocketBase(PB_URL);
 
 async function setup() {
   console.log(`Connecting to PocketBase at ${PB_URL}…`);
-  await pb.admins.authWithPassword(email, password);
-  console.log('Authenticated as admin.');
+  await pb.collection('_superusers').authWithPassword(email, password);
+  console.log('Authenticated as superuser.');
 
   // Check if collection already exists
   const collections = await pb.collections.getFullList();
@@ -38,7 +38,7 @@ async function setup() {
   await pb.collections.create({
     name: 'leads',
     type: 'base',
-    schema: [
+    fields: [
       { name: 'item_name',       type: 'text',   required: true },
       { name: 'seller',          type: 'text',   required: true },
       { name: 'price',           type: 'number', required: false },
