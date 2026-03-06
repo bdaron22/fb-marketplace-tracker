@@ -93,7 +93,7 @@ export default function App() {
               <Car size={20} />
             </div>
             <div>
-              <h1 className="text-lg font-bold leading-tight">AutoScout</h1>
+              <h1 className="text-lg font-bold leading-tight">T1000</h1>
               <p className="text-xs text-gray-400">Vehicle Sourcing</p>
             </div>
           </div>
@@ -163,7 +163,7 @@ export default function App() {
           </button>
           <div className="flex items-center gap-2">
             <Car size={18} className="text-blue-600" />
-            <span className="font-bold text-gray-900">AutoScout</span>
+            <span className="font-bold text-gray-900">T1000</span>
           </div>
           {followUpCount > 0 && (
             <span className="ml-auto bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">

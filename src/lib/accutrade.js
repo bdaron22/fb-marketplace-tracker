@@ -14,7 +14,7 @@
 export async function getAccuTradeValue({ year, make, model, trim, mileage, condition }) {
   const apiKey =
     import.meta.env.VITE_ACCUTRADE_API_KEY ||
-    localStorage.getItem('autoscout:accutrade_key') ||
+    localStorage.getItem('t1000:accutrade_key') ||
     '';
 
   if (apiKey) {

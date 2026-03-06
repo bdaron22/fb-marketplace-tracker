@@ -51,19 +51,19 @@ export default function Settings() {
   useEffect(() => {
     const stored = loadSettings();
     setKeys({
-      anthropic_key: stored.anthropic_key || localStorage.getItem('autoscout:anthropic_key') || '',
-      apify_token: stored.apify_token || localStorage.getItem('autoscout:apify_token') || '',
+      anthropic_key: stored.anthropic_key || localStorage.getItem('t1000:anthropic_key') || '',
+      apify_token: stored.apify_token || localStorage.getItem('t1000:apify_token') || '',
       pocketbase_url: stored.pocketbase_url || '',
-      accutrade_key: stored.accutrade_key || localStorage.getItem('autoscout:accutrade_key') || '',
+      accutrade_key: stored.accutrade_key || localStorage.getItem('t1000:accutrade_key') || '',
     });
   }, []);
 
   const handleSave = () => {
     saveSettings(keys);
     // Also write to individual localStorage keys for libs that read directly
-    if (keys.anthropic_key) localStorage.setItem('autoscout:anthropic_key', keys.anthropic_key);
-    if (keys.apify_token) localStorage.setItem('autoscout:apify_token', keys.apify_token);
-    if (keys.accutrade_key) localStorage.setItem('autoscout:accutrade_key', keys.accutrade_key);
+    if (keys.anthropic_key) localStorage.setItem('t1000:anthropic_key', keys.anthropic_key);
+    if (keys.apify_token) localStorage.setItem('t1000:apify_token', keys.apify_token);
+    if (keys.accutrade_key) localStorage.setItem('t1000:accutrade_key', keys.accutrade_key);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -133,7 +133,7 @@ export default function Settings() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `autoscout-export-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `t1000-export-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -151,7 +151,7 @@ export default function Settings() {
         }
         setImportError('');
       } catch {
-        setImportError('Invalid file format. Please use an AutoScout export file.');
+        setImportError('Invalid file format. Please use a T1000 export file.');
       }
     };
     reader.readAsText(file);
@@ -161,7 +161,7 @@ export default function Settings() {
   const clearAllData = () => {
     if (!window.confirm('Delete ALL vehicles and feedback? This cannot be undone.')) return;
     saveVehicles([]);
-    localStorage.removeItem('autoscout:feedback');
+    localStorage.removeItem('t1000:feedback');
     alert('All data cleared. Refresh the page.');
   };
 
@@ -256,8 +256,8 @@ export default function Settings() {
           </ol>
           <div className="bg-gray-50 rounded-lg p-3 mt-2 text-xs font-mono space-y-1">
             <p className="text-gray-700 font-semibold">Collections needed:</p>
-            <p className="text-blue-600">autoscout_vehicles</p>
-            <p className="text-blue-600">autoscout_feedback</p>
+            <p className="text-blue-600">t1000_vehicles</p>
+            <p className="text-blue-600">t1000_feedback</p>
           </div>
           <p className="text-xs text-gray-400">
             All vehicle fields are stored as JSON — no schema setup required if you use the "json" field type for the full record.
@@ -284,7 +284,7 @@ export default function Settings() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-700">Import Data</p>
-              <p className="text-xs text-gray-400">Restore from a previous AutoScout export</p>
+              <p className="text-xs text-gray-400">Restore from a previous T1000 export</p>
             </div>
             <label className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer">
               <Upload size={14} /> Import
@@ -311,7 +311,7 @@ export default function Settings() {
 
       {/* About */}
       <div className="bg-white rounded-xl shadow-sm p-6">
-        <h3 className="font-semibold text-gray-800 mb-2">About AutoScout</h3>
+        <h3 className="font-semibold text-gray-800 mb-2">About T1000</h3>
         <div className="text-sm text-gray-500 space-y-1">
           <p>Version 1.0 · Vehicle Sourcing Tool</p>
           <p>Built with React + Vite + Tailwind CSS + PocketBase</p>

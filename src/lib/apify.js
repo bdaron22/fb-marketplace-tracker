@@ -8,7 +8,7 @@ const APIFY_BASE = 'https://api.apify.com/v2';
 const ACTOR_ID = 'apify~facebook-marketplace-scraper';
 
 function getToken() {
-  return import.meta.env.VITE_APIFY_TOKEN || localStorage.getItem('autoscout:apify_token') || '';
+  return import.meta.env.VITE_APIFY_TOKEN || localStorage.getItem('t1000:apify_token') || '';
 }
 
 /**
@@ -78,7 +78,7 @@ export async function scrapeMarketplace({ searchTerms, location, maxPrice, minYe
 }
 
 /**
- * Normalize raw Apify items into AutoScout vehicle objects.
+ * Normalize raw Apify items into T1000 vehicle objects.
  */
 function normalizeApifyItems(items, minYear) {
   return items

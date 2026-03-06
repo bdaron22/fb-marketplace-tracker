@@ -86,7 +86,7 @@ export default function Dashboard({ vehicles, onSelectVehicle }) {
     <div className="p-6 space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
-        <p className="text-gray-500 text-sm mt-1">AutoScout vehicle sourcing overview</p>
+        <p className="text-gray-500 text-sm mt-1">T1000 vehicle sourcing overview</p>
       </div>
 
       {/* Follow-up alerts */}

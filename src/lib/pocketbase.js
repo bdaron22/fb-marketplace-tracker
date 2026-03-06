@@ -2,8 +2,8 @@
  * PocketBase integration (optional).
  * If VITE_POCKETBASE_URL is set, vehicles/feedback sync to PocketBase.
  * Collections required:
- *   - autoscout_vehicles
- *   - autoscout_feedback
+ *   - t1000_vehicles
+ *   - t1000_feedback
  */
 
 let pb = null;
@@ -27,16 +27,16 @@ export async function pbUpsertVehicle(vehicle) {
   try {
     // Try update first, then create
     const existing = await client
-      .collection('autoscout_vehicles')
+      .collection('t1000_vehicles')
       .getFirstListItem(`local_id="${vehicle.id}"`)
       .catch(() => null);
     if (existing) {
-      return await client.collection('autoscout_vehicles').update(existing.id, {
+      return await client.collection('t1000_vehicles').update(existing.id, {
         ...vehicle,
         local_id: vehicle.id,
       });
     }
-    return await client.collection('autoscout_vehicles').create({
+    return await client.collection('t1000_vehicles').create({
       ...vehicle,
       local_id: vehicle.id,
     });
@@ -50,7 +50,7 @@ export async function pbFetchVehicles() {
   const client = await getClient();
   if (!client) return null;
   try {
-    const result = await client.collection('autoscout_vehicles').getList(1, 200, {
+    const result = await client.collection('t1000_vehicles').getList(1, 200, {
       sort: '-created',
     });
     return result.items;
@@ -65,13 +65,13 @@ export async function pbSaveFeedback(entry) {
   if (!client) return null;
   try {
     const existing = await client
-      .collection('autoscout_feedback')
+      .collection('t1000_feedback')
       .getFirstListItem(`vehicle_id="${entry.vehicle_id}"`)
       .catch(() => null);
     if (existing) {
-      return await client.collection('autoscout_feedback').update(existing.id, entry);
+      return await client.collection('t1000_feedback').update(existing.id, entry);
     }
-    return await client.collection('autoscout_feedback').create(entry);
+    return await client.collection('t1000_feedback').create(entry);
   } catch (err) {
     console.warn('[PocketBase] saveFeedback error:', err.message);
     return null;

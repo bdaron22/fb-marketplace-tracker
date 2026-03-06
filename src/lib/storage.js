@@ -1,13 +1,13 @@
 /**
- * AutoScout Storage Layer
+ * T1000 Storage Layer
  * Uses localStorage as primary store, with optional PocketBase sync.
  * All data mutations go through these functions.
  */
 
 const KEYS = {
-  VEHICLES: 'autoscout:vehicles',
-  SETTINGS: 'autoscout:settings',
-  FEEDBACK: 'autoscout:feedback',
+  VEHICLES: 't1000:vehicles',
+  SETTINGS: 't1000:settings',
+  FEEDBACK: 't1000:feedback',
 };
 
 // ─── Vehicle CRUD ────────────────────────────────────────────────────────────

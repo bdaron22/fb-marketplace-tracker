@@ -16,7 +16,7 @@ export default function AccuTradePanel({ vehicle, onResult }) {
   const [error, setError] = useState('');
 
   const hasApiKey =
-    !!(import.meta.env.VITE_ACCUTRADE_API_KEY || localStorage.getItem('autoscout:accutrade_key'));
+    !!(import.meta.env.VITE_ACCUTRADE_API_KEY || localStorage.getItem('t1000:accutrade_key'));
 
   const lookup = async () => {
     if (!form.year || !form.make || !form.model) {

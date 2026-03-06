@@ -1,5 +1,5 @@
 /**
- * Claude API integration for AutoScout.
+ * Claude API integration for T1000.
  * Handles:
  *  - Vehicle photo analysis (condition, damage, flags)
  *  - License plate reading
@@ -13,7 +13,7 @@ const MODEL = 'claude-opus-4-6-20250514';
 function getApiKey() {
   return (
     import.meta.env.VITE_ANTHROPIC_API_KEY ||
-    localStorage.getItem('autoscout:anthropic_key') ||
+    localStorage.getItem('t1000:anthropic_key') ||
     ''
   );
 }
