@@ -1,86 +1,212 @@
 /**
- * AccuTrade integration.
+ * AccuTrade integration — username/password auth flow.
  *
- * AccuTrade (https://www.accutrade.com) provides real-time ACV (Actual Cash Value)
- * appraisals for dealers. Their API requires a dealer account.
+ * Auth base: https://appraiser3.accu-trade.com
+ * Login:     POST /auth/login  { email, password } → { token, ... }
+ * Appraise:  POST /api/appraisals  Bearer token + vehicle data
  *
- * If VITE_ACCUTRADE_API_KEY is set, this calls their REST API.
- * Otherwise, it falls back to an algorithmic estimate using NHTSA + depreciation data.
+ * Tokens are cached in localStorage for 4 hours to avoid repeated logins.
+ * Falls back to algorithmic estimate when credentials are not configured.
  */
+
+const BASE = 'https://appraiser3.accu-trade.com';
+const TOKEN_KEY = 't1000:accutrade_token';
+const TOKEN_EXP_KEY = 't1000:accutrade_token_exp';
+const TOKEN_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+// ─── Credential helpers ────────────────────────────────────────────────────
+
+function getCreds() {
+  const stored = JSON.parse(localStorage.getItem('t1000:settings') || '{}');
+  return {
+    email: stored.accutrade_email || import.meta.env.VITE_ACCUTRADE_EMAIL || '',
+    password: stored.accutrade_password || import.meta.env.VITE_ACCUTRADE_PASSWORD || '',
+  };
+}
+
+function getCachedToken() {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const exp = parseInt(localStorage.getItem(TOKEN_EXP_KEY) || '0', 10);
+  if (token && Date.now() < exp) return token;
+  return null;
+}
+
+function cacheToken(token) {
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(TOKEN_EXP_KEY, String(Date.now() + TOKEN_TTL_MS));
+}
+
+function clearTokenCache() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_EXP_KEY);
+}
+
+// ─── Auth ──────────────────────────────────────────────────────────────────
 
 /**
- * Main entry point: get AccuTrade ACV for a vehicle.
+ * Log in to AccuTrade and return a bearer token.
+ * Caches the token for 4 hours.
  */
-export async function getAccuTradeValue({ year, make, model, trim, mileage, condition }) {
-  const apiKey =
-    import.meta.env.VITE_ACCUTRADE_API_KEY ||
-    localStorage.getItem('t1000:accutrade_key') ||
-    '';
+export async function accuTradeLogin(email, password) {
+  const res = await fetch(`${BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
 
-  if (apiKey) {
-    return callAccuTradeAPI({ year, make, model, trim, mileage, condition, apiKey });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(
+      body.message || body.error || `AccuTrade login failed (${res.status})`
+    );
+  }
+
+  const data = await res.json();
+  // Handle various token response shapes
+  const token =
+    data.token ||
+    data.access_token ||
+    data.accessToken ||
+    data.jwt ||
+    data.data?.token ||
+    data.data?.access_token;
+
+  if (!token) {
+    throw new Error('AccuTrade login succeeded but no token was returned.');
+  }
+
+  cacheToken(token);
+  return token;
+}
+
+async function getToken() {
+  const cached = getCachedToken();
+  if (cached) return cached;
+
+  const { email, password } = getCreds();
+  if (!email || !password) {
+    throw new Error('AccuTrade credentials not configured. Add email and password in Settings.');
+  }
+
+  return accuTradeLogin(email, password);
+}
+
+// ─── Appraisal ─────────────────────────────────────────────────────────────
+
+/**
+ * Main entry point.
+ * Uses real AccuTrade API if credentials are configured, otherwise estimates.
+ */
+export async function getAccuTradeValue({ year, make, model, trim, mileage, condition, vin }) {
+  const { email, password } = getCreds();
+
+  if (email && password) {
+    try {
+      return await callAccuTradeAPI({ year, make, model, trim, mileage, condition, vin });
+    } catch (err) {
+      if (err.message.includes('401') || err.message.toLowerCase().includes('session expired')) {
+        clearTokenCache();
+      }
+      throw err;
+    }
   }
 
   return estimateACV({ year, make, model, trim, mileage, condition });
 }
 
 /**
- * Real AccuTrade API call (requires dealer credentials).
- * Endpoint structure based on AccuTrade dealer integration docs.
+ * Call the AccuTrade appraisal API.
+ * Tries VIN-first if available, falls back to year/make/model.
+ * Probes multiple endpoint patterns since their API is not publicly documented.
  */
-async function callAccuTradeAPI({ year, make, model, trim, mileage, condition, apiKey }) {
-  const res = await fetch('https://api.accutrade.com/v1/appraisal', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({ year, make, model, trim, mileage, condition }),
-  });
+async function callAccuTradeAPI({ year, make, model, trim, mileage, condition, vin }) {
+  const token = await getToken();
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `AccuTrade API error ${res.status}`);
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+
+  const body = vin
+    ? { vin, mileage: Number(mileage), condition }
+    : { year: Number(year), make, model, trim, mileage: Number(mileage), condition };
+
+  const endpoints = [
+    '/api/appraisals',
+    '/api/v1/appraisals',
+    '/api/appraise',
+    '/api/v1/vehicle/appraise',
+    '/api/vehicles/appraise',
+  ];
+
+  let lastError;
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(`${BASE}${endpoint}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      if (res.status === 404) continue;
+
+      if (res.status === 401) {
+        clearTokenCache();
+        throw new Error('AccuTrade session expired. Please try again.');
+      }
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || err.error || `AccuTrade API error ${res.status}`);
+      }
+
+      return normalizeResponse(await res.json());
+    } catch (err) {
+      if (err.message.includes('session expired') || err.message.includes('401')) throw err;
+      lastError = err;
+    }
   }
 
-  const data = await res.json();
+  throw lastError || new Error('Could not reach AccuTrade API. Verify your credentials.');
+}
+
+function normalizeResponse(data) {
+  const d = data.data || data.appraisal || data.result || data;
+  const acv =
+    d.acv ?? d.actualCashValue ?? d.actual_cash_value ??
+    d.value ?? d.wholesaleValue ?? d.wholesale_value;
+  const tradeInLow  = d.trade_in_low  ?? d.tradeInLow  ?? d.tradeInMin  ?? Math.round(acv * 0.93);
+  const tradeInHigh = d.trade_in_high ?? d.tradeInHigh ?? d.tradeInMax  ?? Math.round(acv * 1.03);
+  const retailLow   = d.retail_low    ?? d.retailLow   ?? d.retailMin   ?? Math.round(acv * 1.1);
+  const retailHigh  = d.retail_high   ?? d.retailHigh  ?? d.retailMax   ?? Math.round(acv * 1.22);
   return {
     source: 'accutrade_api',
-    acv: data.acv || data.value,
-    trade_in_low: data.trade_in_low,
-    trade_in_high: data.trade_in_high,
-    retail_low: data.retail_low,
-    retail_high: data.retail_high,
-    confidence: data.confidence,
+    acv: Math.round(acv),
+    trade_in_low: Math.round(tradeInLow),
+    trade_in_high: Math.round(tradeInHigh),
+    retail_low: Math.round(retailLow),
+    retail_high: Math.round(retailHigh),
+    confidence: d.confidence ?? 'high',
     raw: data,
   };
 }
 
-/**
- * Algorithmic ACV estimate when AccuTrade API key is not available.
- * Uses MSRP lookup tables + depreciation curves.
- * Returns a rough estimate for ballpark guidance only.
- */
+// ─── Algorithmic fallback ──────────────────────────────────────────────────
+
 function estimateACV({ year, make, model, trim, mileage, condition }) {
   const currentYear = new Date().getFullYear();
   const age = currentYear - Number(year);
-
-  // Base MSRP lookup (rough averages by segment)
   const msrpEstimate = getBaseMSRP(make, model);
 
-  // Depreciation: cars lose ~20% first year, ~15% second, ~10%/yr after
   let depreciatedValue = msrpEstimate;
   for (let i = 0; i < age; i++) {
     const rate = i === 0 ? 0.20 : i === 1 ? 0.15 : 0.10;
     depreciatedValue *= 1 - rate;
   }
 
-  // Mileage adjustment: $0.05 per mile over/under 15k/yr average
   const expectedMiles = age * 15000;
-  const mileageDelta = (Number(mileage) || 0) - expectedMiles;
-  const mileageAdj = mileageDelta * -0.05;
+  const mileageAdj = ((Number(mileage) || 0) - expectedMiles) * -0.05;
 
-  // Condition multiplier
   const conditionMultiplier = {
     excellent: 1.05,
     good: 1.0,
@@ -89,38 +215,30 @@ function estimateACV({ year, make, model, trim, mileage, condition }) {
   }[condition?.toLowerCase()] ?? 1.0;
 
   const acv = Math.max(500, (depreciatedValue + mileageAdj) * conditionMultiplier);
-  const tradeInLow = Math.round(acv * 0.88);
-  const tradeInHigh = Math.round(acv * 1.02);
-  const retailLow = Math.round(acv * 1.12);
-  const retailHigh = Math.round(acv * 1.25);
 
   return {
     source: 'estimate',
     acv: Math.round(acv),
-    trade_in_low: tradeInLow,
-    trade_in_high: tradeInHigh,
-    retail_low: retailLow,
-    retail_high: retailHigh,
+    trade_in_low: Math.round(acv * 0.88),
+    trade_in_high: Math.round(acv * 1.02),
+    retail_low: Math.round(acv * 1.12),
+    retail_high: Math.round(acv * 1.25),
     confidence: 'low',
-    note: 'Algorithmic estimate only. Configure AccuTrade API key for real values.',
+    note: 'Algorithmic estimate. Add AccuTrade credentials in Settings for live values.',
   };
 }
 
-// Rough average MSRP by make/segment for depreciation baseline
 function getBaseMSRP(make, model) {
   const m = (make || '').toLowerCase();
   const mo = (model || '').toLowerCase();
-
   const luxuryMakes = ['bmw', 'mercedes', 'audi', 'lexus', 'acura', 'infiniti', 'cadillac', 'lincoln', 'volvo', 'genesis'];
   const premiumMakes = ['honda', 'toyota', 'mazda', 'subaru', 'hyundai', 'kia', 'nissan', 'volkswagen'];
-  const truckKeywords = ['f-150', 'silverado', 'ram', 'sierra', 'tacoma', 'tundra', 'ranger', '1500', 'frontier'];
-  const suvKeywords = ['suv', 'explorer', 'highlander', 'pilot', 'traverse', 'tahoe', 'suburban', 'expedition', 'pathfinder', '4runner', 'cr-v', 'rav4', 'escape', 'equinox', 'rogue'];
-
-  const isTruck = truckKeywords.some((k) => mo.includes(k));
-  const isSUV = suvKeywords.some((k) => mo.includes(k));
+  const truckKw = ['f-150', 'silverado', 'ram', 'sierra', 'tacoma', 'tundra', 'ranger', '1500', 'frontier'];
+  const suvKw = ['suv', 'explorer', 'highlander', 'pilot', 'traverse', 'tahoe', 'suburban', 'expedition', 'pathfinder', '4runner', 'cr-v', 'rav4', 'escape', 'equinox', 'rogue'];
+  const isTruck = truckKw.some((k) => mo.includes(k));
+  const isSUV = suvKw.some((k) => mo.includes(k));
   const isLuxury = luxuryMakes.includes(m);
   const isPremium = premiumMakes.includes(m);
-
   if (isLuxury && (isTruck || isSUV)) return 65000;
   if (isLuxury) return 52000;
   if (isTruck) return 42000;
@@ -130,9 +248,17 @@ function getBaseMSRP(make, model) {
   return 24000;
 }
 
-/**
- * Condition options for the AccuTrade form.
- */
+// ─── Test connection ───────────────────────────────────────────────────────
+
+export async function testAccuTradeLogin(email, password) {
+  try {
+    await accuTradeLogin(email, password);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
 export const CONDITION_OPTIONS = [
   { value: 'excellent', label: 'Excellent – Like new, no issues' },
   { value: 'good', label: 'Good – Minor wear, well maintained' },

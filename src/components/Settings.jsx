@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Save, Eye, EyeOff, CheckCircle, XCircle, Loader, Download, Upload, Trash2, ExternalLink, RefreshCw } from 'lucide-react';
 import { loadSettings, saveSettings, loadVehicles, saveVehicles, loadFeedback } from '../lib/storage';
 import { testPocketBaseConnection } from '../lib/pocketbase';
+import { testAccuTradeLogin } from '../lib/accutrade';
 
-const FIELD_META = {
+// Fields rendered via the generic key/value loop
+const API_FIELDS = {
   anthropic_key: {
     label: 'Anthropic API Key',
     placeholder: 'sk-ant-api03-...',
@@ -23,15 +25,8 @@ const FIELD_META = {
     placeholder: 'http://127.0.0.1:8090',
     link: 'https://pocketbase.io/docs/',
     linkLabel: 'PocketBase docs',
-    description: 'Optional. Self-host PocketBase for persistent cloud storage. Leave blank to use localStorage only.',
+    description: 'Optional. Leave blank to use localStorage only.',
     type: 'url',
-  },
-  accutrade_key: {
-    label: 'AccuTrade API Key',
-    placeholder: 'Your AccuTrade dealer key',
-    link: 'https://www.accutrade.com',
-    linkLabel: 'Get AccuTrade',
-    description: 'Optional. Requires a dealer account. Leave blank to use the built-in estimate calculator.',
   },
 };
 
@@ -40,7 +35,8 @@ export default function Settings() {
     anthropic_key: '',
     apify_token: '',
     pocketbase_url: '',
-    accutrade_key: '',
+    accutrade_email: '',
+    accutrade_password: '',
   });
   const [show, setShow] = useState({});
   const [testing, setTesting] = useState({});
@@ -51,22 +47,23 @@ export default function Settings() {
   useEffect(() => {
     const stored = loadSettings();
     setKeys({
-      anthropic_key: stored.anthropic_key || localStorage.getItem('t1000:anthropic_key') || '',
-      apify_token: stored.apify_token || localStorage.getItem('t1000:apify_token') || '',
-      pocketbase_url: stored.pocketbase_url || '',
-      accutrade_key: stored.accutrade_key || localStorage.getItem('t1000:accutrade_key') || '',
+      anthropic_key:     stored.anthropic_key     || localStorage.getItem('t1000:anthropic_key') || '',
+      apify_token:       stored.apify_token       || localStorage.getItem('t1000:apify_token')   || '',
+      pocketbase_url:    stored.pocketbase_url    || '',
+      accutrade_email:   stored.accutrade_email   || '',
+      accutrade_password: stored.accutrade_password || '',
     });
   }, []);
 
   const handleSave = () => {
     saveSettings(keys);
-    // Also write to individual localStorage keys for libs that read directly
     if (keys.anthropic_key) localStorage.setItem('t1000:anthropic_key', keys.anthropic_key);
-    if (keys.apify_token) localStorage.setItem('t1000:apify_token', keys.apify_token);
-    if (keys.accutrade_key) localStorage.setItem('t1000:accutrade_key', keys.accutrade_key);
+    if (keys.apify_token)   localStorage.setItem('t1000:apify_token',   keys.apify_token);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
+
+  // ─── Connection tests ──────────────────────────────────────────────────────
 
   const testClaude = async () => {
     if (!keys.anthropic_key) return;
@@ -97,7 +94,7 @@ export default function Settings() {
   const testPB = async () => {
     if (!keys.pocketbase_url) return;
     setTesting((t) => ({ ...t, pocketbase_url: true }));
-    const { ok, error } = await testPocketBaseConnection(keys.pocketbase_url);
+    const { ok } = await testPocketBaseConnection(keys.pocketbase_url);
     setTestResults((r) => ({ ...r, pocketbase_url: ok ? 'ok' : 'fail' }));
     setTesting((t) => ({ ...t, pocketbase_url: false }));
   };
@@ -115,13 +112,23 @@ export default function Settings() {
     }
   };
 
-  const testFns = {
+  const testAccuTrade = async () => {
+    if (!keys.accutrade_email || !keys.accutrade_password) return;
+    setTesting((t) => ({ ...t, accutrade: true }));
+    setTestResults((r) => ({ ...r, accutrade: null }));
+    const { ok, error } = await testAccuTradeLogin(keys.accutrade_email, keys.accutrade_password);
+    setTestResults((r) => ({ ...r, accutrade: ok ? 'ok' : 'fail', accutrade_error: error }));
+    setTesting((t) => ({ ...t, accutrade: false }));
+  };
+
+  const genericTestFns = {
     anthropic_key: testClaude,
     pocketbase_url: testPB,
     apify_token: testApify,
   };
 
-  // Export data
+  // ─── Data management ───────────────────────────────────────────────────────
+
   const exportData = () => {
     const data = {
       vehicles: loadVehicles(),
@@ -165,6 +172,8 @@ export default function Settings() {
     alert('All data cleared. Refresh the page.');
   };
 
+  // ─── Render ────────────────────────────────────────────────────────────────
+
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       <div>
@@ -176,16 +185,12 @@ export default function Settings() {
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h3 className="font-semibold text-gray-800 mb-4">API Keys</h3>
         <div className="space-y-5">
-          {Object.entries(FIELD_META).map(([key, meta]) => (
+          {/* Generic single-input fields */}
+          {Object.entries(API_FIELDS).map(([key, meta]) => (
             <div key={key}>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-sm font-medium text-gray-700">{meta.label}</label>
-                <a
-                  href={meta.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                >
+                <a href={meta.link} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1">
                   <ExternalLink size={11} />
                   {meta.linkLabel}
                 </a>
@@ -197,45 +202,79 @@ export default function Settings() {
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm pr-10 font-mono focus:ring-2 focus:ring-blue-500"
                     placeholder={meta.placeholder}
                     value={keys[key]}
-                    onChange={(e) => {
-                      setKeys({ ...keys, [key]: e.target.value });
-                      setTestResults((r) => ({ ...r, [key]: null }));
-                    }}
+                    onChange={(e) => { setKeys({ ...keys, [key]: e.target.value }); setTestResults((r) => ({ ...r, [key]: null })); }}
                   />
-                  <button
-                    onClick={() => setShow((s) => ({ ...s, [key]: !s[key] }))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
+                  <button onClick={() => setShow((s) => ({ ...s, [key]: !s[key] }))} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     {show[key] ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
-                {testFns[key] && keys[key] && (
-                  <button
-                    onClick={testFns[key]}
-                    disabled={testing[key]}
-                    className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50 shrink-0"
-                  >
-                    {testing[key] ? (
-                      <Loader size={12} className="animate-spin" />
-                    ) : testResults[key] === 'ok' ? (
-                      <CheckCircle size={12} className="text-green-500" />
-                    ) : testResults[key] === 'fail' ? (
-                      <XCircle size={12} className="text-red-500" />
-                    ) : (
-                      <RefreshCw size={12} />
-                    )}
-                    {testing[key] ? 'Testing…' : testResults[key] === 'ok' ? 'Connected' : testResults[key] === 'fail' ? 'Failed' : 'Test'}
-                  </button>
+                {genericTestFns[key] && keys[key] && (
+                  <TestButton
+                    loading={testing[key]}
+                    result={testResults[key]}
+                    onClick={genericTestFns[key]}
+                  />
                 )}
               </div>
               <p className="text-xs text-gray-400 mt-1">{meta.description}</p>
             </div>
           ))}
+
+          {/* AccuTrade — email + password */}
+          <div className="border-t border-gray-100 pt-5">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm font-medium text-gray-700">AccuTrade Login</label>
+              <a href="https://appraiser3.accu-trade.com/auth/login" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                <ExternalLink size={11} />
+                AccuTrade portal
+              </a>
+            </div>
+            <p className="text-xs text-gray-400 mb-3">
+              Your AccuTrade dealer email and password. Used to get a live ACV for every vehicle. Leave blank to use the built-in estimate.
+            </p>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <input
+                type="email"
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                placeholder="dealer@example.com"
+                value={keys.accutrade_email}
+                onChange={(e) => { setKeys({ ...keys, accutrade_email: e.target.value }); setTestResults((r) => ({ ...r, accutrade: null })); }}
+              />
+              <div className="relative">
+                <input
+                  type={show.accutrade_password ? 'text' : 'password'}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm pr-10 focus:ring-2 focus:ring-blue-500"
+                  placeholder="Password"
+                  value={keys.accutrade_password}
+                  onChange={(e) => { setKeys({ ...keys, accutrade_password: e.target.value }); setTestResults((r) => ({ ...r, accutrade: null })); }}
+                />
+                <button onClick={() => setShow((s) => ({ ...s, accutrade_password: !s.accutrade_password }))} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  {show.accutrade_password ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+            {keys.accutrade_email && keys.accutrade_password && (
+              <div className="flex items-center gap-3">
+                <TestButton
+                  loading={testing.accutrade}
+                  result={testResults.accutrade}
+                  onClick={testAccuTrade}
+                  label="Test Login"
+                />
+                {testResults.accutrade === 'ok' && (
+                  <span className="text-xs text-green-600">Logged in — token cached for 4 hours</span>
+                )}
+                {testResults.accutrade === 'fail' && testResults.accutrade_error && (
+                  <span className="text-xs text-red-600">{testResults.accutrade_error}</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <button
           onClick={handleSave}
-          className={`mt-5 flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+          className={`mt-6 flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
             saved ? 'bg-green-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
         >
@@ -259,9 +298,6 @@ export default function Settings() {
             <p className="text-blue-600">t1000_vehicles</p>
             <p className="text-blue-600">t1000_feedback</p>
           </div>
-          <p className="text-xs text-gray-400">
-            All vehicle fields are stored as JSON — no schema setup required if you use the "json" field type for the full record.
-          </p>
         </div>
       </div>
 
@@ -274,10 +310,7 @@ export default function Settings() {
               <p className="text-sm font-medium text-gray-700">Export Data</p>
               <p className="text-xs text-gray-400">Download all vehicles and feedback as JSON</p>
             </div>
-            <button
-              onClick={exportData}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
-            >
+            <button onClick={exportData} className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
               <Download size={14} /> Export
             </button>
           </div>
@@ -291,18 +324,13 @@ export default function Settings() {
               <input type="file" accept=".json" onChange={importData} className="hidden" />
             </label>
           </div>
-          {importError && (
-            <p className="text-xs text-red-600">{importError}</p>
-          )}
+          {importError && <p className="text-xs text-red-600">{importError}</p>}
           <div className="flex items-center justify-between pt-2 border-t border-gray-100">
             <div>
               <p className="text-sm font-medium text-red-600">Clear All Data</p>
               <p className="text-xs text-gray-400">Permanently delete all vehicles and feedback</p>
             </div>
-            <button
-              onClick={clearAllData}
-              className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm hover:bg-red-50 transition-colors"
-            >
+            <button onClick={clearAllData} className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm hover:bg-red-50 transition-colors">
               <Trash2 size={14} /> Clear
             </button>
           </div>
@@ -315,9 +343,30 @@ export default function Settings() {
         <div className="text-sm text-gray-500 space-y-1">
           <p>Version 1.0 · Vehicle Sourcing Tool</p>
           <p>Built with React + Vite + Tailwind CSS + PocketBase</p>
-          <p>AI powered by Claude (Anthropic) · Scraping by Apify · VIN data from NHTSA</p>
+          <p>AI powered by Claude (Anthropic) · Scraping by Apify · VIN data from NHTSA · ACV by AccuTrade</p>
         </div>
       </div>
     </div>
+  );
+}
+
+function TestButton({ loading, result, onClick, label = 'Test' }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50 shrink-0"
+    >
+      {loading ? (
+        <Loader size={12} className="animate-spin" />
+      ) : result === 'ok' ? (
+        <CheckCircle size={12} className="text-green-500" />
+      ) : result === 'fail' ? (
+        <XCircle size={12} className="text-red-500" />
+      ) : (
+        <RefreshCw size={12} />
+      )}
+      {loading ? 'Testing…' : result === 'ok' ? 'Connected' : result === 'fail' ? 'Failed' : label}
+    </button>
   );
 }

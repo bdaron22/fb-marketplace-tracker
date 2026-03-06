@@ -15,8 +15,8 @@ export default function AccuTradePanel({ vehicle, onResult }) {
   const [result, setResult] = useState(vehicle?.accutrade_data || null);
   const [error, setError] = useState('');
 
-  const hasApiKey =
-    !!(import.meta.env.VITE_ACCUTRADE_API_KEY || localStorage.getItem('t1000:accutrade_key'));
+  const hasCreds =
+    !!(JSON.parse(localStorage.getItem("t1000:settings")||"{}").accutrade_email);
 
   const lookup = async () => {
     if (!form.year || !form.make || !form.model) {
@@ -30,7 +30,7 @@ export default function AccuTradePanel({ vehicle, onResult }) {
     setError('');
     setLoading(true);
     try {
-      const data = await getAccuTradeValue(form);
+      const data = await getAccuTradeValue({ ...form, vin: vehicle?.vin });
       setResult(data);
       onResult?.({
         accutrade_value: data.acv,
@@ -46,13 +46,13 @@ export default function AccuTradePanel({ vehicle, onResult }) {
   return (
     <div className="space-y-4">
       {/* API key notice */}
-      {!hasApiKey && (
+      {!hasCreds && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2 text-sm text-amber-800">
           <Info size={16} className="mt-0.5 shrink-0" />
           <div>
             <p className="font-medium">Using algorithmic estimate</p>
             <p className="text-amber-700 text-xs mt-0.5">
-              Add your AccuTrade dealer API key in Settings for real-time ACV values.{' '}
+              Add your AccuTrade email and password in Settings for live ACV values.{' '}
               <a href="https://www.accutrade.com" target="_blank" rel="noopener noreferrer" className="underline">
                 Get AccuTrade →
               </a>
@@ -136,7 +136,7 @@ export default function AccuTradePanel({ vehicle, onResult }) {
         className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
       >
         {loading ? <Loader size={15} className="animate-spin" /> : <TrendingUp size={15} />}
-        {loading ? 'Looking up…' : hasApiKey ? 'Get AccuTrade ACV' : 'Estimate ACV'}
+        {loading ? 'Looking up…' : hasCreds ? 'Get AccuTrade ACV' : 'Estimate ACV'}
       </button>
 
       {/* Result */}
