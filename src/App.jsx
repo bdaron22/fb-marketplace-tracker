@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, ExternalLink, Search, Calendar, Camera } from 'lucide-react';
+import { Plus, Trash2, ExternalLink, Search, Calendar, Camera, RefreshCw } from 'lucide-react';
 import pb from './lib/pb';
 
 // Map PocketBase record to local format (camelCase)
@@ -33,6 +33,9 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeQuery, setScrapeQuery] = useState('');
+  const [scrapeLocation, setScrapeLocation] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
@@ -179,6 +182,50 @@ Rules:
     }
   };
 
+  const scrapeMarketplace = async () => {
+    if (!scrapeQuery.trim()) {
+      alert('Enter a search term to scrape (e.g. "2018 Toyota Camry")');
+      return;
+    }
+    setScraping(true);
+    try {
+      const res = await fetch('/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: scrapeQuery, location: scrapeLocation, maxItems: 20 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Scrape failed');
+
+      const today = new Date().toISOString().split('T')[0];
+      const newLeads = (data.items || []).map((item) => ({
+        itemName: item.title || item.name || scrapeQuery,
+        seller: item.seller?.name || item.sellerName || '',
+        price: parseFloat(item.price?.replace(/[^0-9.]/g, '') || 0) || 0,
+        fbLink: item.url || item.link || '',
+        messengerNotes: item.description || '',
+        status: 'new',
+        dateAdded: today,
+        followUpDate: '',
+      }));
+
+      if (newLeads.length === 0) {
+        alert('No listings found. Try a different search term or location.');
+        return;
+      }
+
+      const created = await Promise.all(newLeads.map((lead) => pb.collection('leads').create(toPB(lead))));
+      setLeads((prev) => [...created.map(fromPB), ...prev]);
+      alert(`Added ${created.length} listing${created.length !== 1 ? 's' : ''} from FB Marketplace!`);
+      setScrapeQuery('');
+    } catch (err) {
+      console.error('Scrape error:', err);
+      alert(`Scrape failed: ${err.message}`);
+    } finally {
+      setScraping(false);
+    }
+  };
+
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -290,6 +337,38 @@ Rules:
               >
                 <Plus size={20} />
                 Add Manually
+              </button>
+            </div>
+          </div>
+
+          {/* FB Marketplace Scraper */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <h2 className="text-sm font-semibold text-blue-900 mb-3">Search FB Marketplace (Apify)</h2>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                placeholder="Search term (e.g. 2018 Toyota Camry)"
+                value={scrapeQuery}
+                onChange={(e) => setScrapeQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && scrapeMarketplace()}
+                className="flex-1 px-3 py-2 border border-blue-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={scraping}
+              />
+              <input
+                type="text"
+                placeholder="Location (optional)"
+                value={scrapeLocation}
+                onChange={(e) => setScrapeLocation(e.target.value)}
+                className="sm:w-48 px-3 py-2 border border-blue-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={scraping}
+              />
+              <button
+                onClick={scrapeMarketplace}
+                disabled={scraping}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw size={16} className={scraping ? 'animate-spin' : ''} />
+                {scraping ? 'Scraping...' : 'Scrape'}
               </button>
             </div>
           </div>
