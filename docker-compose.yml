@@ -1,0 +1,13 @@
+services:
+  pocketbase:
+    build:
+      context: .
+      args:
+        - VITE_ANTHROPIC_API_KEY=${VITE_ANTHROPIC_API_KEY:-}
+        - VITE_POCKETBASE_URL=
+    container_name: fb-marketplace-tracker
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./pb_data:/pb/pb_data
