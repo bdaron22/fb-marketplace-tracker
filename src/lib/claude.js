@@ -8,7 +8,7 @@
  */
 
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-opus-4-6-20250514';
+const MODEL = 'claude-opus-4-6';
 
 function getApiKey() {
   return (
