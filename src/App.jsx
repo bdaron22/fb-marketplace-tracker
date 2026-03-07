@@ -55,11 +55,11 @@ export default function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': 'import.meta.env.VITE_ANTHROPIC_API_KEY', // You'll need to add this
+          'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
           'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-5',
           max_tokens: 1000,
           messages: [{
             role: 'user',
@@ -382,6 +382,12 @@ Rules:
                 className={`px-4 py-2 rounded-lg transition-colors ${filter === 'purchased' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
               >
                 Purchased
+              </button>
+              <button
+                onClick={() => setFilter('passed')}
+                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'passed' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              >
+                Passed
               </button>
             </div>
           </div>
