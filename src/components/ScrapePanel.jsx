@@ -1,22 +1,22 @@
 import React, { useState } from 'react';
-import { Search, MapPin, DollarSign, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { MapPin, DollarSign, Loader2, ChevronDown, ChevronUp, Search, Gauge, Calendar, Navigation } from 'lucide-react';
 
 export default function ScrapePanel({ onResults, scraping, setScraping }) {
   const [open, setOpen] = useState(true);
   const [config, setConfig] = useState({
-    keywords: 'used car truck suv',
-    location: '',
+    location: '63011',
+    radius: 110,
     minPrice: '',
     maxPrice: '30000',
+    minMiles: '',
+    maxMiles: '',
+    minYear: '',
+    maxYear: '',
     maxItems: 20,
   });
   const [error, setError] = useState('');
 
   const handleScrape = async () => {
-    if (!config.keywords.trim()) {
-      setError('Please enter search keywords.');
-      return;
-    }
     setError('');
     setScraping(true);
     try {
@@ -34,6 +34,22 @@ export default function ScrapePanel({ onResults, scraping, setScraping }) {
       setScraping(false);
     }
   };
+
+  const field = (label, icon, key, placeholder, type = 'text') => (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1 uppercase tracking-wide">{label}</label>
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">{icon}</span>
+        <input
+          type={type}
+          placeholder={placeholder}
+          value={config[key]}
+          onChange={e => setConfig({ ...config, [key]: e.target.value })}
+          className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        />
+      </div>
+    </div>
+  );
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
@@ -55,32 +71,15 @@ export default function ScrapePanel({ onResults, scraping, setScraping }) {
 
       {open && (
         <div className="px-5 pb-5 border-t border-gray-100 pt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1 uppercase tracking-wide">
-                Search Keywords *
-              </label>
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="e.g. toyota camry 2018"
-                  value={config.keywords}
-                  onChange={e => setConfig({ ...config, keywords: e.target.value })}
-                  className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            </div>
 
+          {/* Row 1: Location + Radius + Max Results */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1 uppercase tracking-wide">
-                Location (City or ZIP)
-              </label>
+              <label className="block text-xs font-medium text-gray-600 mb-1 uppercase tracking-wide">ZIP Code</label>
               <div className="relative">
                 <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="e.g. Dallas, TX"
                   value={config.location}
                   onChange={e => setConfig({ ...config, location: e.target.value })}
                   className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -90,8 +89,27 @@ export default function ScrapePanel({ onResults, scraping, setScraping }) {
 
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1 uppercase tracking-wide">
-                Max Results
+                Radius — <span className="text-blue-600 font-bold">{config.radius} miles</span>
               </label>
+              <div className="flex items-center gap-3 pt-1">
+                <Navigation size={14} className="text-gray-400 shrink-0" />
+                <input
+                  type="range"
+                  min={10}
+                  max={500}
+                  step={10}
+                  value={config.radius}
+                  onChange={e => setConfig({ ...config, radius: Number(e.target.value) })}
+                  className="w-full accent-blue-600"
+                />
+              </div>
+              <div className="flex justify-between text-xs text-gray-400 mt-0.5">
+                <span>10 mi</span><span>500 mi</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1 uppercase tracking-wide">Max Results</label>
               <select
                 value={config.maxItems}
                 onChange={e => setConfig({ ...config, maxItems: Number(e.target.value) })}
@@ -103,38 +121,20 @@ export default function ScrapePanel({ onResults, scraping, setScraping }) {
                 <option value={100}>100 listings</option>
               </select>
             </div>
+          </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1 uppercase tracking-wide">
-                Min Price
-              </label>
-              <div className="relative">
-                <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={config.minPrice}
-                  onChange={e => setConfig({ ...config, minPrice: e.target.value })}
-                  className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            </div>
+          {/* Row 2: Price range */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            {field('Min Price', <DollarSign size={14} />, 'minPrice', '0', 'number')}
+            {field('Max Price', <DollarSign size={14} />, 'maxPrice', '30000', 'number')}
+            {field('Min Year', <Calendar size={14} />, 'minYear', '2000', 'number')}
+            {field('Max Year', <Calendar size={14} />, 'maxYear', new Date().getFullYear().toString(), 'number')}
+          </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1 uppercase tracking-wide">
-                Max Price
-              </label>
-              <div className="relative">
-                <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="number"
-                  placeholder="50000"
-                  value={config.maxPrice}
-                  onChange={e => setConfig({ ...config, maxPrice: e.target.value })}
-                  className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            </div>
+          {/* Row 3: Mileage range */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            {field('Min Miles', <Gauge size={14} />, 'minMiles', '0', 'number')}
+            {field('Max Miles', <Gauge size={14} />, 'maxMiles', '150000', 'number')}
           </div>
 
           {error && (
@@ -149,15 +149,9 @@ export default function ScrapePanel({ onResults, scraping, setScraping }) {
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
           >
             {scraping ? (
-              <>
-                <Loader2 size={18} className="animate-spin" />
-                Scraping Facebook Marketplace...
-              </>
+              <><Loader2 size={18} className="animate-spin" />Scraping Facebook Marketplace...</>
             ) : (
-              <>
-                <Search size={18} />
-                Scrape Now
-              </>
+              <><Search size={18} />Scrape Now</>
             )}
           </button>
         </div>

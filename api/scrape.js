@@ -8,11 +8,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { keywords, location, minPrice, maxPrice, maxItems = 20 } = req.body || {};
-
-  if (!keywords) {
-    return res.status(400).json({ error: 'keywords is required' });
-  }
+  const { location, radius = 110, minPrice, maxPrice, minMiles, maxMiles, minYear, maxYear, maxItems = 20 } = req.body || {};
 
   const token = process.env.APIFY_TOKEN;
   if (!token) {
@@ -25,11 +21,16 @@ export default async function handler(req, res) {
     // Actor input — adjust to match the exact Apify FB Marketplace actor you're using.
     // Common actor: apify/facebook-marketplace-scraper
     const input = {
-      searchQueries: [keywords],
+      searchQueries: ['used car truck suv'],
       maxItems: Number(maxItems),
       ...(location && { locationCity: location }),
+      ...(radius && { radiusMiles: Number(radius) }),
       ...(minPrice && { priceMin: Number(minPrice) }),
       ...(maxPrice && { priceMax: Number(maxPrice) }),
+      ...(minYear && { yearMin: Number(minYear) }),
+      ...(maxYear && { yearMax: Number(maxYear) }),
+      ...(minMiles && { mileageMin: Number(minMiles) }),
+      ...(maxMiles && { mileageMax: Number(maxMiles) }),
     };
 
     const run = await client.actor('apify/facebook-marketplace-scraper').call(input, {
