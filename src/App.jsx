@@ -224,9 +224,9 @@ Rules:
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold text-gray-900">Purchase Lead Tracker</h1>
             <div className="flex gap-3">
-              <label className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors cursor-pointer">
+              <label className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${uploading ? 'bg-green-400 cursor-not-allowed opacity-60' : 'bg-green-600 hover:bg-green-700 cursor-pointer'} text-white`}>
                 <Camera size={20} />
-                Upload Screenshot
+                {uploading ? 'Processing...' : 'Upload Screenshot'}
                 <input
                   type="file"
                   accept="image/*"
@@ -237,10 +237,10 @@ Rules:
               </label>
               <button
                 onClick={() => setShowForm(!showForm)}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${showForm ? 'bg-gray-600 hover:bg-gray-700' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
               >
                 <Plus size={20} />
-                Add Manually
+                {showForm ? 'Cancel' : 'Add Manually'}
               </button>
             </div>
           </div>
@@ -353,42 +353,25 @@ Rules:
               />
             </div>
             <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={() => setFilter('all')}
-                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-              >
-                All ({leads.length})
-              </button>
-              <button
-                onClick={() => setFilter('new')}
-                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'new' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-              >
-                New
-              </button>
-              <button
-                onClick={() => setFilter('contacted')}
-                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'contacted' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-              >
-                Contacted
-              </button>
-              <button
-                onClick={() => setFilter('negotiating')}
-                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'negotiating' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-              >
-                Negotiating
-              </button>
-              <button
-                onClick={() => setFilter('purchased')}
-                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'purchased' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-              >
-                Purchased
-              </button>
-              <button
-                onClick={() => setFilter('passed')}
-                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'passed' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-              >
-                Passed
-              </button>
+              {[
+                { key: 'all', label: 'All' },
+                { key: 'new', label: 'New' },
+                { key: 'contacted', label: 'Contacted' },
+                { key: 'negotiating', label: 'Negotiating' },
+                { key: 'purchased', label: 'Purchased' },
+                { key: 'passed', label: 'Passed' },
+              ].map(({ key, label }) => {
+                const count = key === 'all' ? leads.length : leads.filter(l => l.status === key).length;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setFilter(key)}
+                    className={`px-4 py-2 rounded-lg transition-colors ${filter === key ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                  >
+                    {label} ({count})
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
