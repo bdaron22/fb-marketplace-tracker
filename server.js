@@ -1,12 +1,30 @@
 // Local dev API server — wraps Vercel-style api/*.js handlers for Express
 import express from 'express';
-import * as dotenv from 'dotenv';
 import { readFileSync } from 'fs';
+
+// Parse KEY=VALUE lines from a .env file string (replaces dotenv.parse)
+function parseEnvFile(content) {
+  const result = {};
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const idx = trimmed.indexOf('=');
+    if (idx === -1) continue;
+    const key = trimmed.slice(0, idx).trim();
+    let value = trimmed.slice(idx + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    result[key] = value;
+  }
+  return result;
+}
 
 // Load .env.local with explicit UTF-8 encoding to handle Windows file encoding issues
 try {
   const envFile = readFileSync('.env.local', 'utf8').replace(/^\uFEFF/, ''); // strip BOM if present
-  const result = dotenv.parse(envFile);
+  const result = parseEnvFile(envFile);
   for (const [key, value] of Object.entries(result)) {
     process.env[key] = value;
   }

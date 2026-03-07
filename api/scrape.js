@@ -18,23 +18,25 @@ export default async function handler(req, res) {
   try {
     const client = new ApifyClient({ token });
 
-    // Actor input — adjust to match the exact Apify FB Marketplace actor you're using.
-    // Common actor: apify/facebook-marketplace-scraper
+    // Build a real Facebook Marketplace vehicles search URL with filter params.
+    // The apify/facebook-marketplace-scraper actor takes startUrls, not custom fields.
+    const zip = location || '63011';
+    const fbParams = new URLSearchParams();
+    if (minPrice) fbParams.set('minPrice', minPrice);
+    if (maxPrice) fbParams.set('maxPrice', maxPrice);
+    if (minYear)  fbParams.set('minYear', minYear);
+    if (maxYear)  fbParams.set('maxYear', maxYear);
+    if (maxMiles) fbParams.set('maxMileage', maxMiles);
+    const fbQuery = fbParams.toString();
+    const fbUrl = `https://www.facebook.com/marketplace/${zip}/vehicles/${fbQuery ? '?' + fbQuery : ''}`;
+
     const input = {
-      searchQueries: ['used car truck suv'],
+      startUrls: [{ url: fbUrl }],
       maxItems: Number(maxItems),
-      ...(location && { locationCity: location }),
-      ...(radius && { radiusMiles: Number(radius) }),
-      ...(minPrice && { priceMin: Number(minPrice) }),
-      ...(maxPrice && { priceMax: Number(maxPrice) }),
-      ...(minYear && { yearMin: Number(minYear) }),
-      ...(maxYear && { yearMax: Number(maxYear) }),
-      ...(minMiles && { mileageMin: Number(minMiles) }),
-      ...(maxMiles && { mileageMax: Number(maxMiles) }),
     };
 
     const run = await client.actor('apify/facebook-marketplace-scraper').call(input, {
-      waitSecs: 120,
+      waitSecs: 300,
     });
 
     const { items } = await client.dataset(run.defaultDatasetId).listItems();
