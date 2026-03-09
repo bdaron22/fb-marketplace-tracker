@@ -3,6 +3,22 @@ import { Camera, Loader, AlertCircle, CheckCircle, Eye, Shield, AlertTriangle, S
 import { analyzeVehiclePhotos, readLicensePlate } from '../lib/claude';
 import { upsertVehicle } from '../lib/storage';
 
+const BUY_COLORS = {
+  strong_buy: 'text-green-700 bg-green-100',
+  buy: 'text-green-600 bg-green-50',
+  neutral: 'text-yellow-700 bg-yellow-100',
+  pass: 'text-red-600 bg-red-50',
+  strong_pass: 'text-red-700 bg-red-100',
+};
+
+const BUY_LABELS = {
+  strong_buy: 'Strong Buy',
+  buy: 'Buy',
+  neutral: 'Neutral',
+  pass: 'Pass',
+  strong_pass: 'Strong Pass',
+};
+
 export default function VehicleAnalysis({ vehicles, setVehicles }) {
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
@@ -73,22 +89,6 @@ export default function VehicleAnalysis({ vehicles, setVehicles }) {
     } finally {
       setPlateLoading(false);
     }
-  };
-
-  const BUY_COLORS = {
-    strong_buy: 'text-green-700 bg-green-100',
-    buy: 'text-green-600 bg-green-50',
-    neutral: 'text-yellow-700 bg-yellow-100',
-    pass: 'text-red-600 bg-red-50',
-    strong_pass: 'text-red-700 bg-red-100',
-  };
-
-  const BUY_LABELS = {
-    strong_buy: 'Strong Buy',
-    buy: 'Buy',
-    neutral: 'Neutral',
-    pass: 'Pass',
-    strong_pass: 'Strong Pass',
   };
 
   return (

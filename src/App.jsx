@@ -8,7 +8,7 @@ import Scraper from './components/Scraper';
 import LeadTracker from './components/LeadTracker';
 import VehicleAnalysis from './components/VehicleAnalysis';
 import SettingsPanel from './components/Settings';
-import { loadVehicles, upsertVehicle } from './lib/storage';
+import { loadVehicles, saveVehicles } from './lib/storage';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart2 },
@@ -51,9 +51,8 @@ export default function App() {
         current = [v, ...current];
       }
     });
-    // Persist and update state
-    current.forEach(upsertVehicle);
-    setVehicles(loadVehicles());
+    saveVehicles(current);
+    setVehicles(current);
   };
 
   const handleSelectVehicleFromDash = (v) => {

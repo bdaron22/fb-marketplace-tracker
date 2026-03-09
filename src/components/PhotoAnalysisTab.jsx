@@ -67,10 +67,10 @@ export default function PhotoAnalysisTab({ vehicle, onResult }) {
           },
         });
       } else {
-        alert('No plate detected in this photo.');
+        setError('No plate detected in this photo.');
       }
     } catch (err) {
-      alert(err.message);
+      setError(err.message);
     } finally {
       setPlateLoading(null);
     }

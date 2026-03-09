@@ -5,58 +5,16 @@ import {
 } from 'lucide-react';
 import { loadFeedback } from '../lib/storage';
 
-export default function Dashboard({ vehicles, onSelectVehicle }) {
-  const feedback = loadFeedback();
+const STATUS_CONFIG = {
+  new: { label: 'New', color: 'bg-blue-100 text-blue-700', icon: Car },
+  contacted: { label: 'Contacted', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
+  negotiating: { label: 'Negotiating', color: 'bg-orange-100 text-orange-700', icon: TrendingUp },
+  purchased: { label: 'Purchased', color: 'bg-green-100 text-green-700', icon: CheckCircle },
+  passed: { label: 'Passed', color: 'bg-gray-100 text-gray-600', icon: XCircle },
+};
 
-  const stats = useMemo(() => {
-    const total = vehicles.length;
-    const byStatus = vehicles.reduce((acc, v) => {
-      acc[v.lead_status] = (acc[v.lead_status] || 0) + 1;
-      return acc;
-    }, {});
-
-    const analyzed = vehicles.filter((v) => v.ai_analysis).length;
-    const withVIN = vehicles.filter((v) => v.vin_data).length;
-    const withAccuTrade = vehicles.filter((v) => v.accutrade_value).length;
-
-    const avgAskingPrice =
-      vehicles.filter((v) => v.price > 0).reduce((s, v) => s + v.price, 0) /
-      (vehicles.filter((v) => v.price > 0).length || 1);
-
-    const purchased = vehicles.filter((v) => v.lead_status === 'purchased');
-    const avgDealDiff =
-      purchased.filter((v) => v.offer_price && v.price).reduce(
-        (s, v) => s + (v.price - v.offer_price),
-        0
-      ) / (purchased.filter((v) => v.offer_price && v.price).length || 1);
-
-    const followUps = vehicles.filter((v) => {
-      if (!v.follow_up_date) return false;
-      const today = new Date().toISOString().split('T')[0];
-      return (
-        v.follow_up_date <= today &&
-        v.lead_status !== 'purchased' &&
-        v.lead_status !== 'passed'
-      );
-    });
-
-    return {
-      total,
-      byStatus,
-      analyzed,
-      withVIN,
-      withAccuTrade,
-      avgAskingPrice: Math.round(avgAskingPrice),
-      avgDealDiff: Math.round(avgDealDiff),
-      followUps,
-      goodFeedback: feedback.filter((f) => f.rating === 'good').length,
-      badFeedback: feedback.filter((f) => f.rating === 'bad').length,
-    };
-  }, [vehicles, feedback]);
-
-  const recentVehicles = vehicles.slice(0, 8);
-
-  const StatCard = ({ icon: Icon, label, value, sub, color = 'blue', onClick }) => (
+function StatCard({ icon: Icon, label, value, sub, color = 'blue', onClick }) {
+  return (
     <div
       className={`bg-white rounded-xl shadow-sm p-5 ${onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
       onClick={onClick}
@@ -73,14 +31,53 @@ export default function Dashboard({ vehicles, onSelectVehicle }) {
       </div>
     </div>
   );
+}
 
-  const statusConfig = {
-    new: { label: 'New', color: 'bg-blue-100 text-blue-700', icon: Car },
-    contacted: { label: 'Contacted', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
-    negotiating: { label: 'Negotiating', color: 'bg-orange-100 text-orange-700', icon: TrendingUp },
-    purchased: { label: 'Purchased', color: 'bg-green-100 text-green-700', icon: CheckCircle },
-    passed: { label: 'Passed', color: 'bg-gray-100 text-gray-600', icon: XCircle },
-  };
+export default function Dashboard({ vehicles, onSelectVehicle }) {
+  const stats = useMemo(() => {
+    const byStatus = {};
+    let analyzed = 0, withVIN = 0, withAccuTrade = 0;
+    let priceSum = 0, priceCount = 0;
+    let dealDiffSum = 0, dealDiffCount = 0;
+    const today = new Date().toISOString().split('T')[0];
+    const followUps = [];
+
+    vehicles.forEach((v) => {
+      byStatus[v.lead_status] = (byStatus[v.lead_status] || 0) + 1;
+      if (v.ai_analysis) analyzed++;
+      if (v.vin_data) withVIN++;
+      if (v.accutrade_value) withAccuTrade++;
+      if (v.price > 0) { priceSum += v.price; priceCount++; }
+      if (v.lead_status === 'purchased' && v.offer_price && v.price) {
+        dealDiffSum += v.price - v.offer_price;
+        dealDiffCount++;
+      }
+      if (
+        v.follow_up_date &&
+        v.follow_up_date <= today &&
+        v.lead_status !== 'purchased' &&
+        v.lead_status !== 'passed'
+      ) {
+        followUps.push(v);
+      }
+    });
+
+    const feedback = loadFeedback();
+    return {
+      total: vehicles.length,
+      byStatus,
+      analyzed,
+      withVIN,
+      withAccuTrade,
+      avgAskingPrice: priceCount ? Math.round(priceSum / priceCount) : 0,
+      avgDealDiff: dealDiffCount ? Math.round(dealDiffSum / dealDiffCount) : 0,
+      followUps,
+      goodFeedback: feedback.filter((f) => f.rating === 'good').length,
+      badFeedback: feedback.filter((f) => f.rating === 'bad').length,
+    };
+  }, [vehicles]);
+
+  const recentVehicles = vehicles.slice(0, 8);
 
   return (
     <div className="p-6 space-y-6">
@@ -136,7 +133,7 @@ export default function Dashboard({ vehicles, onSelectVehicle }) {
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm p-5">
           <h3 className="font-semibold text-gray-800 mb-4">Lead Pipeline</h3>
           <div className="space-y-3">
-            {Object.entries(statusConfig).map(([status, cfg]) => {
+            {Object.entries(STATUS_CONFIG).map(([status, cfg]) => {
               const count = stats.byStatus[status] || 0;
               const pct = stats.total ? Math.round((count / stats.total) * 100) : 0;
               return (
@@ -189,7 +186,7 @@ export default function Dashboard({ vehicles, onSelectVehicle }) {
           <h3 className="font-semibold text-gray-800 mb-4">Recent Vehicles</h3>
           <div className="divide-y divide-gray-100">
             {recentVehicles.map((v) => {
-              const cfg = statusConfig[v.lead_status] || statusConfig.new;
+              const cfg = STATUS_CONFIG[v.lead_status] || STATUS_CONFIG.new;
               return (
                 <div
                   key={v.id}

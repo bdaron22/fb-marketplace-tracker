@@ -18,6 +18,21 @@ function getApiKey() {
   );
 }
 
+/** Build a Claude image content block from a URL or data URI. */
+function buildImageContent(url) {
+  if (url.startsWith('data:')) {
+    const [header, data] = url.split(',');
+    const media_type = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+    return { type: 'image', source: { type: 'base64', media_type, data } };
+  }
+  return { type: 'image', source: { type: 'url', url } };
+}
+
+/** Strip markdown code fences from a Claude JSON response. */
+function cleanJson(text) {
+  return text.replace(/```json\n?|\n?```/g, '').trim();
+}
+
 async function callClaude({ messages, max_tokens = 1500, system }) {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error('Anthropic API key not configured. Add it in Settings.');
@@ -50,18 +65,7 @@ async function callClaude({ messages, max_tokens = 1500, system }) {
  * Returns structured analysis object.
  */
 export async function analyzeVehiclePhotos(photoUrls, vehicleInfo = {}) {
-  const imageContents = await Promise.all(
-    photoUrls.slice(0, 6).map(async (url) => {
-      // Try to fetch image as base64 for cross-origin images
-      if (url.startsWith('data:')) {
-        const [header, data] = url.split(',');
-        const mediaType = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
-        return { type: 'image', source: { type: 'base64', media_type: mediaType, data } };
-      }
-      // Use URL source type (Claude supports direct URLs)
-      return { type: 'image', source: { type: 'url', url } };
-    })
-  );
+  const imageContents = photoUrls.slice(0, 6).map(buildImageContent);
 
   const vehicleDesc = vehicleInfo.title
     ? `Vehicle: ${vehicleInfo.year || ''} ${vehicleInfo.make || ''} ${vehicleInfo.model || ''} – ${vehicleInfo.title}`
@@ -101,29 +105,19 @@ Rules:
     max_tokens: 800,
   });
 
-  const clean = text.replace(/```json\n?|\n?```/g, '').trim();
-  return JSON.parse(clean);
+  return JSON.parse(cleanJson(text));
 }
 
 /**
  * Read a license plate from a single image.
  */
 export async function readLicensePlate(imageUrl) {
-  const imageContent =
-    imageUrl.startsWith('data:')
-      ? (() => {
-          const [header, data] = imageUrl.split(',');
-          const mediaType = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
-          return { type: 'image', source: { type: 'base64', media_type: mediaType, data } };
-        })()
-      : { type: 'image', source: { type: 'url', url: imageUrl } };
-
   const text = await callClaude({
     messages: [
       {
         role: 'user',
         content: [
-          imageContent,
+          buildImageContent(imageUrl),
           {
             type: 'text',
             text: `Read any visible license plate in this image. Return ONLY a JSON object:
@@ -137,7 +131,7 @@ Return ONLY JSON, no markdown.`,
     max_tokens: 100,
   });
 
-  return JSON.parse(text.replace(/```json\n?|\n?```/g, '').trim());
+  return JSON.parse(cleanJson(text));
 }
 
 /**
@@ -199,7 +193,7 @@ Return ONLY a JSON object:
       'You are an expert auto dealer advisor. Always respond with valid JSON only, no markdown formatting.',
   });
 
-  return JSON.parse(text.replace(/```json\n?|\n?```/g, '').trim());
+  return JSON.parse(cleanJson(text));
 }
 
 /**
@@ -233,6 +227,5 @@ Rules: Extract ALL visible vehicle conversations. For title use format YEAR MAKE
     max_tokens: 1000,
   });
 
-  const clean = text.replace(/```json\n?|\n?```/g, '').trim();
-  return JSON.parse(clean);
+  return JSON.parse(cleanJson(text));
 }

@@ -25,13 +25,15 @@ const BAD_REASONS = [
 ];
 
 export default function FeedbackPanel({ vehicle, onResult }) {
-  const allFeedback = loadFeedback();
-  const existing = allFeedback.find((f) => f.vehicle_id === vehicle.id);
+  // Read storage once on mount via lazy initializer
+  const [initialData] = useState(
+    () => loadFeedback().find((f) => f.vehicle_id === vehicle.id)
+  );
 
-  const [rating, setRating] = useState(existing?.rating || null);
-  const [reason, setReason] = useState(existing?.reason || '');
-  const [notes, setNotes] = useState(existing?.notes || '');
-  const [saved, setSaved] = useState(!!existing);
+  const [rating, setRating] = useState(initialData?.rating ?? null);
+  const [reason, setReason] = useState(initialData?.reason ?? '');
+  const [notes, setNotes] = useState(initialData?.notes ?? '');
+  const [saved, setSaved] = useState(!!initialData);
   const [stats, setStats] = useState({ good: 0, bad: 0, neutral: 0 });
 
   useEffect(() => {

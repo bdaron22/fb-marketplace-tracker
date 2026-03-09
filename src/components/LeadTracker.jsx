@@ -68,8 +68,12 @@ export default function LeadTracker({ vehicles, setVehicles, selectedVehicle, se
       return 0;
     });
 
+  const statusCounts = vehicles.reduce((acc, v) => {
+    acc[v.lead_status] = (acc[v.lead_status] || 0) + 1;
+    return acc;
+  }, {});
   const counts = STATUS_FILTERS.reduce((acc, f) => {
-    acc[f.value] = f.value === 'all' ? vehicles.length : vehicles.filter((v) => v.lead_status === f.value).length;
+    acc[f.value] = f.value === 'all' ? vehicles.length : (statusCounts[f.value] || 0);
     return acc;
   }, {});
 
