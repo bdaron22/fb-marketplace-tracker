@@ -1,11 +1,14 @@
 /**
  * Apify integration for Facebook Marketplace scraping.
- * Actor: apify/facebook-marketplace-scraper
- * Docs: https://apify.com/apify/facebook-marketplace-scraper
+ *
+ * Routes through the local Express server (/api/scrape) when available,
+ * keeping the API key server-side. Falls back to direct Apify calls
+ * if the server isn't running (e.g. Vercel/static deploy).
  */
 
 const APIFY_BASE = 'https://api.apify.com/v2';
-const ACTOR_ID = 'apify~facebook-marketplace-scraper';
+// Direct-call actor (fallback only)
+const ACTOR_ID = 'maxcopell~facebook-marketplace';
 
 function getToken() {
   return (
@@ -17,24 +20,84 @@ function getToken() {
 }
 
 /**
- * Start a scrape run and poll until completion.
- * Returns the array of scraped vehicle items.
+ * Scrape Facebook Marketplace listings.
+ * Tries the local API proxy first, falls back to direct Apify calls.
  */
-export async function scrapeMarketplace({ searchTerms, location, maxPrice, minYear, maxResults = 50 }, onStatus) {
+export async function scrapeMarketplace(
+  { searchTerms, location, maxPrice, minYear, maxResults = 50 },
+  onStatus
+) {
+  onStatus?.('Connecting to scraper...');
+
+  const terms = Array.isArray(searchTerms) ? searchTerms : [searchTerms];
+  const query = terms.join(', ');
+
+  // Try server proxy first (avoids CORS + keeps key secure)
+  try {
+    const probeRes = await fetch('/api/health');
+    if (probeRes.ok) {
+      return await scrapeViaProxy(
+        { query, location, maxPrice, minYear, maxResults },
+        onStatus
+      );
+    }
+  } catch {
+    // Server not running — fall through to direct call
+  }
+
+  // Direct Apify call (requires token in Settings)
+  return await scrapeDirectly(
+    { terms, location, maxPrice, minYear, maxResults },
+    onStatus
+  );
+}
+
+// ─── Server proxy path ────────────────────────────────────────────────────────
+
+async function scrapeViaProxy(
+  { query, location, maxPrice, minYear, maxResults },
+  onStatus
+) {
+  onStatus?.('Scraping via local server...');
+
+  const res = await fetch('/api/scrape', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, location, maxResults, minYear, maxPrice }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Server error ${res.status}`);
+  }
+
+  const { items } = await res.json();
+  onStatus?.(`Found ${items.length} listings.`);
+  return normalizeApifyItems(items, minYear);
+}
+
+// ─── Direct Apify call (fallback) ─────────────────────────────────────────────
+
+async function scrapeDirectly(
+  { terms, location, maxPrice, minYear, maxResults },
+  onStatus
+) {
   const token = getToken();
-  if (!token) throw new Error('Apify API token not configured. Add it in Settings.');
+  if (!token) {
+    throw new Error(
+      'Apify API token not configured. Add it in Settings, or run the app with `npm start` to use the server proxy.'
+    );
+  }
 
-  onStatus?.('Starting Apify actor run...');
+  onStatus?.('Starting Apify actor run (direct)...');
 
-  // Build actor input
   const input = {
-    searchTerms: Array.isArray(searchTerms) ? searchTerms : [searchTerms],
+    searchTerms: terms,
     maxResults,
     ...(location && { locationGeoId: location }),
     ...(maxPrice && { maxPrice: Number(maxPrice) }),
   };
 
-  // Start the actor run
   const startRes = await fetch(
     `${APIFY_BASE}/acts/${ACTOR_ID}/runs?token=${token}`,
     {
@@ -50,13 +113,11 @@ export async function scrapeMarketplace({ searchTerms, location, maxPrice, minYe
   const { data: run } = await startRes.json();
   const runId = run.id;
 
-  onStatus?.(`Run started (ID: ${runId}). Scraping Facebook Marketplace...`);
+  onStatus?.(`Run started (ID: ${runId}). Scraping...`);
 
-  // Poll for completion
-  let attempts = 0;
-  while (attempts < 60) {
+  // Poll for completion (max 5 min)
+  for (let i = 0; i < 60; i++) {
     await delay(5000);
-    attempts++;
     const statusRes = await fetch(`${APIFY_BASE}/actor-runs/${runId}?token=${token}`);
     const { data: runStatus } = await statusRes.json();
 
@@ -67,13 +128,11 @@ export async function scrapeMarketplace({ searchTerms, location, maxPrice, minYe
     if (runStatus.status === 'FAILED' || runStatus.status === 'ABORTED') {
       throw new Error(`Apify run ${runStatus.status.toLowerCase()}`);
     }
-    onStatus?.(`Scraping... (${attempts * 5}s elapsed, status: ${runStatus.status})`);
+    onStatus?.(`Scraping... (${(i + 1) * 5}s, status: ${runStatus.status})`);
   }
 
-  // Fetch dataset items
-  const datasetId = run.defaultDatasetId;
   const itemsRes = await fetch(
-    `${APIFY_BASE}/datasets/${datasetId}/items?token=${token}&format=json&limit=${maxResults}`
+    `${APIFY_BASE}/datasets/${run.defaultDatasetId}/items?token=${token}&format=json&limit=${maxResults}`
   );
   if (!itemsRes.ok) throw new Error('Failed to fetch dataset items');
   const items = await itemsRes.json();
@@ -82,9 +141,8 @@ export async function scrapeMarketplace({ searchTerms, location, maxPrice, minYe
   return normalizeApifyItems(items, minYear);
 }
 
-/**
- * Normalize raw Apify items into T1000 vehicle objects.
- */
+// ─── Normalize raw Apify items into T1000 vehicle objects ─────────────────────
+
 function normalizeApifyItems(items, minYear) {
   return items
     .map((item) => {
@@ -126,7 +184,6 @@ function normalizeApifyItems(items, minYear) {
 }
 
 function parseTitle(title) {
-  // Try to extract YEAR MAKE MODEL from common FB listing title formats
   const match = title.match(/^(\d{4})\s+([A-Za-z-]+)\s+(.+?)(?:\s+[-–]|$)/);
   if (match) {
     return { year: match[1], make: match[2], model: match[3].trim() };
@@ -136,14 +193,12 @@ function parseTitle(title) {
 
 function parsePrice(raw) {
   if (!raw) return 0;
-  const str = String(raw).replace(/[^0-9.]/g, '');
-  return parseFloat(str) || 0;
+  return parseFloat(String(raw).replace(/[^0-9.]/g, '')) || 0;
 }
 
 function parseMileage(text) {
   const match = String(text).match(/(\d[\d,]*)\s*(?:mi|miles|mile)/i);
-  if (match) return parseInt(match[1].replace(/,/g, ''), 10);
-  return 0;
+  return match ? parseInt(match[1].replace(/,/g, ''), 10) : 0;
 }
 
 function extractPhotos(item) {
