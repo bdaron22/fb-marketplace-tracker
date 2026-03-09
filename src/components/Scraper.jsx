@@ -4,17 +4,22 @@ import { scrapeMarketplace } from '../lib/apify';
 import { extractLeadsFromScreenshot } from '../lib/claude';
 import { blankVehicle, generateId } from '../lib/storage';
 
-const LOCATION = '63011';
 const RADIUS_OPTIONS = [10, 25, 50, 100];
 const MAX_RESULTS_OPTIONS = [5, 10, 15, 20, 25, 30, 40, 50];
 
+const LS_LOCATION = 't1000:scraper_location';
+const LS_KEYWORD  = 't1000:scraper_keyword';
+
 export default function Scraper({ onVehiclesFound }) {
+  const [location, setLocation] = useState(() => localStorage.getItem(LS_LOCATION) || '63011');
+  const [keyword, setKeyword]   = useState(() => localStorage.getItem(LS_KEYWORD)  || 'cars');
   const [radius, setRadius] = useState(25);
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [minMiles, setMinMiles] = useState('');
   const [maxMiles, setMaxMiles] = useState('');
-  const [maxResults, setMaxResults] = useState(5);
+  const [minYear,  setMinYear]  = useState('');
+  const [maxResults, setMaxResults] = useState(10);
 
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState('');
@@ -29,9 +34,11 @@ export default function Scraper({ onVehiclesFound }) {
     setRunning(true);
     setStatus('');
     setResults([]);
+    localStorage.setItem(LS_LOCATION, location);
+    localStorage.setItem(LS_KEYWORD,  keyword);
     try {
       const vehicles = await scrapeMarketplace(
-        { location: LOCATION, radius, minPrice, maxPrice, minMiles, maxMiles, maxResults },
+        { query: keyword.trim() || 'cars', location: location.trim() || '63011', radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults },
         setStatus
       );
       setResults(vehicles);
@@ -96,7 +103,7 @@ export default function Scraper({ onVehiclesFound }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Marketplace Scraper</h2>
-          <p className="text-sm text-gray-500 mt-1">Find vehicles near {LOCATION}</p>
+          <p className="text-sm text-gray-500 mt-1">Find vehicles on Facebook Marketplace</p>
         </div>
         <label className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors shrink-0 ${uploading ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}>
           <Camera size={15} />
@@ -112,15 +119,33 @@ export default function Scraper({ onVehiclesFound }) {
           Search Filters
         </h3>
 
-        {/* Location (locked) */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-            <MapPin size={14} className="text-gray-400" />
-            Location
-          </label>
-          <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
-            <span className="text-sm font-semibold text-gray-800">{LOCATION}</span>
-            <span className="text-xs text-gray-400">(fixed)</span>
+        {/* Search keyword + location */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+              <Search size={14} className="text-gray-400" />
+              Search
+            </label>
+            <input
+              type="text"
+              placeholder="cars, trucks, honda…"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+              <MapPin size={14} className="text-gray-400" />
+              ZIP / City
+            </label>
+            <input
+              type="text"
+              placeholder="63011"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
           </div>
         </div>
 
@@ -190,6 +215,18 @@ export default function Scraper({ onVehiclesFound }) {
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
+        </div>
+
+        {/* Year / Min Year */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Min Year</label>
+          <input
+            type="number"
+            placeholder="e.g. 2015"
+            value={minYear}
+            onChange={(e) => setMinYear(e.target.value)}
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
         </div>
 
         {/* Max results */}

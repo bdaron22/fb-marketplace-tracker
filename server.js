@@ -1,5 +1,6 @@
 import express from 'express';
 import { config } from 'dotenv';
+import { networkInterfaces } from 'os';
 
 config();
 
@@ -82,6 +83,15 @@ app.post('/api/scrape', async (req, res) => {
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 const PORT = process.env.API_PORT || 3001;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`T1000 API server → http://localhost:${PORT}`);
+  // Print LAN IP so you can connect from your phone
+  const nets = networkInterfaces();
+  for (const ifaces of Object.values(nets)) {
+    for (const iface of ifaces) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        console.log(`  📱 On your phone → http://${iface.address}:5173`);
+      }
+    }
+  }
 });

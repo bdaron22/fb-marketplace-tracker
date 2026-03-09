@@ -24,12 +24,10 @@ function getToken() {
  * Tries the local API proxy first, falls back to direct Apify calls.
  */
 export async function scrapeMarketplace(
-  { location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults = 5 },
+  { query = 'cars', location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults = 10 },
   onStatus
 ) {
   onStatus?.('Connecting to scraper...');
-
-  const query = 'cars';
 
   // Try server proxy first (avoids CORS + keeps key secure)
   try {
