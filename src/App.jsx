@@ -8,7 +8,7 @@ import Scraper from './components/Scraper';
 import LeadTracker from './components/LeadTracker';
 import VehicleAnalysis from './components/VehicleAnalysis';
 import SettingsPanel from './components/Settings';
-import { loadVehicles, saveVehicles } from './lib/storage';
+import { loadVehiclesAsync, upsertVehicleAsync } from './lib/storage';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart2 },
@@ -25,7 +25,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    setVehicles(loadVehicles());
+    loadVehiclesAsync().then(setVehicles);
   }, []);
 
   // Follow-up alerts count
@@ -39,19 +39,19 @@ export default function App() {
     );
   }).length;
 
-  const addOrUpdateVehicles = (newVehicles) => {
-    let current = loadVehicles();
-    newVehicles.forEach((v) => {
+  const addOrUpdateVehicles = async (newVehicles) => {
+    let current = vehicles;
+    for (const v of newVehicles) {
       const idx = current.findIndex(
         (x) => x.id === v.id || (v.fb_url && x.fb_url === v.fb_url)
       );
       if (idx >= 0) {
-        current[idx] = { ...current[idx], ...v };
+        current = current.map((x, i) => (i === idx ? { ...x, ...v } : x));
       } else {
         current = [v, ...current];
       }
-    });
-    saveVehicles(current);
+      await upsertVehicleAsync(v);
+    }
     setVehicles(current);
   };
 

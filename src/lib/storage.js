@@ -1,8 +1,18 @@
 /**
  * T1000 Storage Layer
- * Uses localStorage as primary store, with optional PocketBase sync.
- * All data mutations go through these functions.
+ *
+ * When VITE_POCKETBASE_URL is set:
+ *   - Async functions use PocketBase as primary source
+ *   - localStorage is kept in sync as an offline cache
+ *
+ * When not set:
+ *   - localStorage only
+ *
+ * Sync functions (loadVehicles, saveVehicles, etc.) always use localStorage
+ * and are kept for settings/export use.
  */
+
+import { pbFetchVehicles, pbUpsertVehicle, pbDeleteVehicle } from './pocketbase';
 
 const KEYS = {
   VEHICLES: 't1000:vehicles',
@@ -10,7 +20,7 @@ const KEYS = {
   FEEDBACK: 't1000:feedback',
 };
 
-// ─── Vehicle CRUD ────────────────────────────────────────────────────────────
+// ─── Sync localStorage helpers ────────────────────────────────────────────────
 
 export function loadVehicles() {
   try {
@@ -51,6 +61,41 @@ export function updateVehicle(id, patch) {
 export function deleteVehicle(id) {
   const all = loadVehicles().filter((v) => v.id !== id);
   saveVehicles(all);
+  return all;
+}
+
+// ─── Async PocketBase-first functions ─────────────────────────────────────────
+
+/**
+ * Load vehicles from PocketBase (primary) or localStorage (fallback).
+ * Also writes PocketBase results back to localStorage as cache.
+ */
+export async function loadVehiclesAsync() {
+  const pbVehicles = await pbFetchVehicles();
+  if (pbVehicles !== null) {
+    saveVehicles(pbVehicles);
+    return pbVehicles;
+  }
+  return loadVehicles();
+}
+
+/**
+ * Upsert a vehicle into localStorage + PocketBase.
+ * Returns the updated vehicles array from localStorage.
+ */
+export async function upsertVehicleAsync(vehicle) {
+  const v = { ...vehicle, id: vehicle.id || generateId(), updated_at: new Date().toISOString() };
+  const all = upsertVehicle(v);
+  pbUpsertVehicle(v).catch(() => {}); // fire-and-forget
+  return all;
+}
+
+/**
+ * Delete a vehicle from localStorage + PocketBase.
+ */
+export async function deleteVehicleAsync(id) {
+  const all = deleteVehicle(id);
+  pbDeleteVehicle(id).catch(() => {}); // fire-and-forget
   return all;
 }
 

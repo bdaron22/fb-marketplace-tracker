@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Camera, Loader, AlertCircle, CheckCircle, Eye, Shield, AlertTriangle, Star } from 'lucide-react';
 import { analyzeVehiclePhotos, readLicensePlate } from '../lib/claude';
-import { upsertVehicle } from '../lib/storage';
+import { upsertVehicleAsync } from '../lib/storage';
 
 const BUY_COLORS = {
   strong_buy: 'text-green-700 bg-green-100',
@@ -68,7 +68,7 @@ export default function VehicleAnalysis({ vehicles, setVehicles }) {
       setResult(data);
 
       if (vehicle) {
-        const updated = upsertVehicle({ ...vehicle, ai_analysis: data });
+        const updated = await upsertVehicleAsync({ ...vehicle, ai_analysis: data });
         setVehicles(updated);
       }
     } catch (err) {

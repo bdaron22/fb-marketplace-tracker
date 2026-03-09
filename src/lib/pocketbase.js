@@ -1,9 +1,10 @@
 /**
- * PocketBase integration (optional).
- * If VITE_POCKETBASE_URL is set, vehicles/feedback sync to PocketBase.
- * Collections required:
- *   - t1000_vehicles
- *   - t1000_feedback
+ * PocketBase integration.
+ * Collection schema (t1000_vehicles):
+ *   - local_id: text (required, unique index recommended)
+ *   - data:     json (required) — stores the full vehicle object
+ *
+ * If VITE_POCKETBASE_URL is not set, all functions return null/false.
  */
 
 let pb = null;
@@ -21,60 +22,54 @@ async function getClient() {
   }
 }
 
-export async function pbUpsertVehicle(vehicle) {
-  const client = await getClient();
-  if (!client) return null;
-  try {
-    // Try update first, then create
-    const existing = await client
-      .collection('t1000_vehicles')
-      .getFirstListItem(`local_id="${vehicle.id}"`)
-      .catch(() => null);
-    if (existing) {
-      return await client.collection('t1000_vehicles').update(existing.id, {
-        ...vehicle,
-        local_id: vehicle.id,
-      });
-    }
-    return await client.collection('t1000_vehicles').create({
-      ...vehicle,
-      local_id: vehicle.id,
-    });
-  } catch (err) {
-    console.warn('[PocketBase] upsertVehicle error:', err.message);
-    return null;
-  }
-}
-
 export async function pbFetchVehicles() {
   const client = await getClient();
   if (!client) return null;
   try {
-    const result = await client.collection('t1000_vehicles').getList(1, 200, {
+    const result = await client.collection('t1000_vehicles').getList(1, 500, {
       sort: '-created',
     });
-    return result.items;
+    return result.items.map((r) => r.data);
   } catch (err) {
     console.warn('[PocketBase] fetchVehicles error:', err.message);
     return null;
   }
 }
 
-export async function pbSaveFeedback(entry) {
+export async function pbUpsertVehicle(vehicle) {
   const client = await getClient();
   if (!client) return null;
   try {
     const existing = await client
-      .collection('t1000_feedback')
-      .getFirstListItem(`vehicle_id="${entry.vehicle_id}"`)
+      .collection('t1000_vehicles')
+      .getFirstListItem(`local_id="${vehicle.id}"`)
+      .catch(() => null);
+    const payload = { local_id: vehicle.id, data: vehicle };
+    if (existing) {
+      return await client.collection('t1000_vehicles').update(existing.id, payload);
+    }
+    return await client.collection('t1000_vehicles').create(payload);
+  } catch (err) {
+    console.warn('[PocketBase] upsertVehicle error:', err.message);
+    return null;
+  }
+}
+
+export async function pbDeleteVehicle(id) {
+  const client = await getClient();
+  if (!client) return false;
+  try {
+    const existing = await client
+      .collection('t1000_vehicles')
+      .getFirstListItem(`local_id="${id}"`)
       .catch(() => null);
     if (existing) {
-      return await client.collection('t1000_feedback').update(existing.id, entry);
+      await client.collection('t1000_vehicles').delete(existing.id);
     }
-    return await client.collection('t1000_feedback').create(entry);
+    return true;
   } catch (err) {
-    console.warn('[PocketBase] saveFeedback error:', err.message);
-    return null;
+    console.warn('[PocketBase] deleteVehicle error:', err.message);
+    return false;
   }
 }
 

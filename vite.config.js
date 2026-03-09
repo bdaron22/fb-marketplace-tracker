@@ -7,6 +7,7 @@ export default defineConfig({
     global: 'globalThis',
   },
   server: {
+    host: true,
     proxy: {
       '/api': 'http://localhost:3001',
     },

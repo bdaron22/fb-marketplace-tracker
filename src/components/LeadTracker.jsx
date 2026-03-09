@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Filter, X, SlidersHorizontal } from 'lucide-react';
 import VehicleCard from './VehicleCard';
 import VehicleDetail from './VehicleDetail';
-import { blankVehicle, generateId, upsertVehicle, deleteVehicle } from '../lib/storage';
+import { blankVehicle, generateId, upsertVehicleAsync, deleteVehicleAsync } from '../lib/storage';
 
 const STATUS_FILTERS = [
   { value: 'all', label: 'All' },
@@ -77,7 +77,7 @@ export default function LeadTracker({ vehicles, setVehicles, selectedVehicle, se
     return acc;
   }, {});
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!addForm.title && !addForm.make) {
       alert('Enter at least a title or make/model');
       return;
@@ -100,7 +100,7 @@ export default function LeadTracker({ vehicles, setVehicles, selectedVehicle, se
       follow_up_date: addForm.follow_up_date,
       source: 'manual',
     });
-    const updated = upsertVehicle(v);
+    const updated = await upsertVehicleAsync(v);
     setVehicles(updated);
     setShowAddForm(false);
     setAddForm({
@@ -111,14 +111,14 @@ export default function LeadTracker({ vehicles, setVehicles, selectedVehicle, se
     setDetailVehicle(v);
   };
 
-  const handleVehicleUpdate = (updatedVehicle) => {
-    const updated = upsertVehicle(updatedVehicle);
+  const handleVehicleUpdate = async (updatedVehicle) => {
+    const updated = await upsertVehicleAsync(updatedVehicle);
     setVehicles(updated);
     setDetailVehicle(updatedVehicle);
   };
 
-  const handleVehicleDelete = (id) => {
-    const updated = deleteVehicle(id);
+  const handleVehicleDelete = async (id) => {
+    const updated = await deleteVehicleAsync(id);
     setVehicles(updated);
     setDetailVehicle(null);
   };
