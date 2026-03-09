@@ -17,9 +17,13 @@ app.post('/api/scrape', async (req, res) => {
   const {
     query,
     location = '',
-    maxResults = 50,
+    radius,
+    maxResults = 5,
     minYear,
+    minPrice,
     maxPrice,
+    minMiles,
+    maxMiles,
     facebookEmail,
     facebookPassword,
   } = req.body;
@@ -44,6 +48,8 @@ app.post('/api/scrape', async (req, res) => {
       search: query,
       location,
       maxItems: Number(maxResults),
+      ...(radius && { radius: Number(radius) }),
+      ...(minPrice && { minPrice: Number(minPrice) }),
       ...(maxPrice && { maxPrice: Number(maxPrice) }),
       ...(facebookEmail && { facebookEmail }),
       ...(facebookPassword && { facebookPassword }),

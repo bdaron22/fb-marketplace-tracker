@@ -24,20 +24,19 @@ function getToken() {
  * Tries the local API proxy first, falls back to direct Apify calls.
  */
 export async function scrapeMarketplace(
-  { searchTerms, location, maxPrice, minYear, maxResults = 50 },
+  { location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults = 5 },
   onStatus
 ) {
   onStatus?.('Connecting to scraper...');
 
-  const terms = Array.isArray(searchTerms) ? searchTerms : [searchTerms];
-  const query = terms.join(', ');
+  const query = 'cars';
 
   // Try server proxy first (avoids CORS + keeps key secure)
   try {
     const probeRes = await fetch('/api/health');
     if (probeRes.ok) {
       return await scrapeViaProxy(
-        { query, location, maxPrice, minYear, maxResults },
+        { query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults },
         onStatus
       );
     }
@@ -47,7 +46,7 @@ export async function scrapeMarketplace(
 
   // Direct Apify call (requires token in Settings)
   return await scrapeDirectly(
-    { terms, location, maxPrice, minYear, maxResults },
+    { query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults },
     onStatus
   );
 }
@@ -55,7 +54,7 @@ export async function scrapeMarketplace(
 // ─── Server proxy path ────────────────────────────────────────────────────────
 
 async function scrapeViaProxy(
-  { query, location, maxPrice, minYear, maxResults },
+  { query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults },
   onStatus
 ) {
   onStatus?.('Scraping via local server...');
@@ -63,7 +62,7 @@ async function scrapeViaProxy(
   const res = await fetch('/api/scrape', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, location, maxResults, minYear, maxPrice }),
+    body: JSON.stringify({ query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults }),
   });
 
   if (!res.ok) {
@@ -73,13 +72,13 @@ async function scrapeViaProxy(
 
   const { items } = await res.json();
   onStatus?.(`Found ${items.length} listings.`);
-  return normalizeApifyItems(items, minYear);
+  return normalizeApifyItems(items, { minYear, minMiles, maxMiles, minPrice, maxPrice });
 }
 
 // ─── Direct Apify call (fallback) ─────────────────────────────────────────────
 
 async function scrapeDirectly(
-  { terms, location, maxPrice, minYear, maxResults },
+  { query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults },
   onStatus
 ) {
   const token = getToken();
@@ -92,9 +91,11 @@ async function scrapeDirectly(
   onStatus?.('Starting Apify actor run (direct)...');
 
   const input = {
-    searchTerms: terms,
-    maxResults,
-    ...(location && { locationGeoId: location }),
+    search: query,
+    maxItems: maxResults,
+    ...(location && { location }),
+    ...(radius && { radius: Number(radius) }),
+    ...(minPrice && { minPrice: Number(minPrice) }),
     ...(maxPrice && { maxPrice: Number(maxPrice) }),
   };
 
@@ -138,29 +139,35 @@ async function scrapeDirectly(
   const items = await itemsRes.json();
 
   onStatus?.(`Found ${items.length} listings.`);
-  return normalizeApifyItems(items, minYear);
+  return normalizeApifyItems(items, { minYear, minMiles, maxMiles, minPrice, maxPrice });
 }
 
 // ─── Normalize raw Apify items into T1000 vehicle objects ─────────────────────
 
-function normalizeApifyItems(items, minYear) {
+function normalizeApifyItems(items, { minYear, minMiles, maxMiles, minPrice, maxPrice } = {}) {
   return items
     .map((item) => {
       const title = item.title || item.name || '';
       const { year, make, model } = parseTitle(title);
+      const price = parsePrice(item.price);
+      const mileage = parseMileage(item.attributes || item.description || '');
 
       if (minYear && year && Number(year) < Number(minYear)) return null;
+      if (minPrice && price && price < Number(minPrice)) return null;
+      if (maxPrice && price && price > Number(maxPrice)) return null;
+      if (minMiles && mileage && mileage < Number(minMiles)) return null;
+      if (maxMiles && mileage && mileage > Number(maxMiles)) return null;
 
       return {
         id: `apify-${item.id || item.listingId || Math.random().toString(36).slice(2)}`,
         fb_url: item.url || item.listingUrl || '',
         title,
-        price: parsePrice(item.price),
+        price,
         year,
         make,
         model,
         trim: '',
-        mileage: parseMileage(item.attributes || item.description || ''),
+        mileage,
         vin: '',
         location: item.location?.city || item.locationText || '',
         seller_name: item.sellerName || item.seller?.name || '',
