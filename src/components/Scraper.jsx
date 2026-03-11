@@ -5,7 +5,7 @@ import { analyzeVehicleListing, extractLeadsFromScreenshot } from '../lib/claude
 import { blankVehicle, generateId } from '../lib/storage';
 
 const RADIUS_OPTIONS = [10, 25, 50, 100];
-const MAX_RESULTS_OPTIONS = [5, 10, 15, 20, 25, 30, 40, 50];
+const MAX_RESULTS_OPTIONS = [10, 20, 30, 40];
 
 const LS_LOCATION = 't1000:scraper_location';
 
@@ -33,6 +33,7 @@ export default function Scraper({ onVehiclesFound }) {
   const [minMiles, setMinMiles] = useState('');
   const [maxMiles, setMaxMiles] = useState('');
   const [minYear, setMinYear] = useState('');
+  const [maxYear, setMaxYear] = useState('');
   const [maxResults, setMaxResults] = useState(10);
 
   const [running, setRunning] = useState(false);
@@ -52,7 +53,7 @@ export default function Scraper({ onVehiclesFound }) {
 
     try {
       const vehicles = await scrapeMarketplace(
-        { query: 'cars', location: location.trim() || '63011', radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults },
+        { query: 'cars', location: location.trim() || '63011', radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxYear, maxResults },
         setStatus
       );
 
@@ -224,11 +225,15 @@ export default function Scraper({ onVehiclesFound }) {
           </div>
         </div>
 
-        {/* Min Year */}
+        {/* Year range */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Min Year</label>
-          <input type="number" placeholder="e.g. 2015" value={minYear} onChange={(e) => setMinYear(e.target.value)}
-            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+          <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
+          <div className="grid grid-cols-2 gap-3">
+            <input type="number" placeholder="Min year" value={minYear} onChange={(e) => setMinYear(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+            <input type="number" placeholder="Max year" value={maxYear} onChange={(e) => setMaxYear(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+          </div>
         </div>
 
         {/* Max results */}

@@ -24,7 +24,7 @@ function getToken() {
  * Tries the local API proxy first, falls back to direct Apify calls.
  */
 export async function scrapeMarketplace(
-  { query = 'cars', location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults = 10 },
+  { query = 'cars', location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxYear, maxResults = 10 },
   onStatus
 ) {
   onStatus?.('Connecting to scraper...');
@@ -34,7 +34,7 @@ export async function scrapeMarketplace(
     const probeRes = await fetch('/api/health');
     if (probeRes.ok) {
       return await scrapeViaProxy(
-        { query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults },
+        { query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxYear, maxResults },
         onStatus
       );
     }
@@ -44,7 +44,7 @@ export async function scrapeMarketplace(
 
   // Direct Apify call (requires token in Settings)
   return await scrapeDirectly(
-    { query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults },
+    { query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxYear, maxResults },
     onStatus
   );
 }
@@ -52,7 +52,7 @@ export async function scrapeMarketplace(
 // ─── Server proxy path ────────────────────────────────────────────────────────
 
 async function scrapeViaProxy(
-  { query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults },
+  { query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxYear, maxResults },
   onStatus
 ) {
   onStatus?.('Scraping via local server...');
@@ -60,7 +60,7 @@ async function scrapeViaProxy(
   const res = await fetch('/api/scrape', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults }),
+    body: JSON.stringify({ query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxYear, maxResults }),
   });
 
   if (!res.ok) {
@@ -70,13 +70,13 @@ async function scrapeViaProxy(
 
   const { items } = await res.json();
   onStatus?.(`Found ${items.length} listings.`);
-  return normalizeApifyItems(items, { minYear, minMiles, maxMiles, minPrice, maxPrice });
+  return normalizeApifyItems(items, { minYear, maxYear, minMiles, maxMiles, minPrice, maxPrice });
 }
 
 // ─── Direct Apify call (fallback) ─────────────────────────────────────────────
 
 async function scrapeDirectly(
-  { query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxResults },
+  { query, location, radius, minPrice, maxPrice, minMiles, maxMiles, minYear, maxYear, maxResults },
   onStatus
 ) {
   const token = getToken();
@@ -137,12 +137,12 @@ async function scrapeDirectly(
   const items = await itemsRes.json();
 
   onStatus?.(`Found ${items.length} listings.`);
-  return normalizeApifyItems(items, { minYear, minMiles, maxMiles, minPrice, maxPrice });
+  return normalizeApifyItems(items, { minYear, maxYear, minMiles, maxMiles, minPrice, maxPrice });
 }
 
 // ─── Normalize raw Apify items into T1000 vehicle objects ─────────────────────
 
-function normalizeApifyItems(items, { minYear, minMiles, maxMiles, minPrice, maxPrice } = {}) {
+function normalizeApifyItems(items, { minYear, maxYear, minMiles, maxMiles, minPrice, maxPrice } = {}) {
   return items
     .map((item) => {
       const title = item.title || item.name || '';
@@ -151,6 +151,7 @@ function normalizeApifyItems(items, { minYear, minMiles, maxMiles, minPrice, max
       const mileage = parseMileage(item.attributes || item.description || '');
 
       if (minYear && year && Number(year) < Number(minYear)) return null;
+      if (maxYear && year && Number(year) > Number(maxYear)) return null;
       if (minPrice && price && price < Number(minPrice)) return null;
       if (maxPrice && price && price > Number(maxPrice)) return null;
       if (minMiles && mileage && mileage < Number(minMiles)) return null;
