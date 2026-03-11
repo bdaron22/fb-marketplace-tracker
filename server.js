@@ -25,9 +25,13 @@ app.post('/api/scrape', async (req, res) => {
     maxPrice,
     minMiles,
     maxMiles,
-    facebookEmail,
-    facebookPassword,
+    facebookEmail: bodyEmail,
+    facebookPassword: bodyPassword,
   } = req.body;
+
+  // Fall back to .env credentials if not provided in the request body
+  const facebookEmail = bodyEmail || process.env.FACEBOOK_EMAIL || '';
+  const facebookPassword = bodyPassword || process.env.FACEBOOK_PASSWORD || '';
 
   const apiKey =
     process.env.APIFY_API_KEY ||
