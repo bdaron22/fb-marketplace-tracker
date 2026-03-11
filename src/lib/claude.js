@@ -197,6 +197,46 @@ Return ONLY a JSON object:
 }
 
 /**
+ * Quickly analyze a vehicle listing using text data only (no photos required).
+ * Returns the same structure as analyzeVehiclePhotos.
+ */
+export async function analyzeVehicleListing(vehicle) {
+  const prompt = `You are an expert used-car buyer evaluating a Facebook Marketplace listing. Analyze this vehicle and identify if it's a good buy.
+
+LISTING DATA:
+- Title: ${vehicle.title || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+- Asking Price: $${vehicle.price?.toLocaleString() || 'unknown'}
+- Year: ${vehicle.year || 'unknown'}
+- Mileage: ${vehicle.mileage ? `${vehicle.mileage.toLocaleString()} miles` : 'unknown'}
+- Location: ${vehicle.location || 'unknown'}
+- Seller: ${vehicle.seller_name || 'unknown'}
+- Description: ${vehicle.description || 'none provided'}
+
+Evaluate based on: price-to-value ratio, mileage for the year, any red flags in the description, and typical market value.
+
+Return ONLY a valid JSON object:
+{
+  "condition_score": <1-10 integer based on description/mileage/price>,
+  "condition_label": <"Excellent"|"Good"|"Fair"|"Poor">,
+  "flags": <array from: ["high_mileage", "low_price_red_flag", "salvage_signs", "flood_signs", "clean", "good_value", "overpriced", "needs_work", "modified"]>,
+  "damage_notes": <concise notes on concerns, max 150 chars>,
+  "positives": <concise notes on positives, max 150 chars>,
+  "buy_recommendation": <"strong_buy"|"buy"|"neutral"|"pass"|"strong_pass">,
+  "recommendation_reason": <1-2 sentences explaining>,
+  "estimated_retail": <rough estimate of retail value as integer>,
+  "estimated_profit": <rough profit potential if bought at asking price>
+}`;
+
+  const text = await callClaude({
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 500,
+    system: 'You are an expert auto dealer. Always respond with valid JSON only.',
+  });
+
+  return JSON.parse(cleanJson(text));
+}
+
+/**
  * Analyze a screenshot of FB Messenger to extract vehicle leads.
  */
 export async function extractLeadsFromScreenshot(base64Image, mediaType = 'image/jpeg') {
